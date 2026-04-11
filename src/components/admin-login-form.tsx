@@ -4,9 +4,6 @@ import { FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
-const BRAND_ICON_URL =
-  "https://phswnczojmrdfioyqsql.supabase.co/storage/v1/object/sign/Address/848po7.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV82NDIwYTUxNy05Y2M3LTQzZWUtOWFhMi00NGQ3YjAwMTVhNDkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJBZGRyZXNzLzg0OHBvNy5wbmciLCJpYXQiOjE3NzU5MjIzNjUsImV4cCI6MTgwNzQ1ODM2NX0.PTenXOe__6pLUUsXw7lRTwZ5sBfjuJaKpQzzjWmrZIM";
-
 const GENERIC_DENY_MESSAGE =
   "This account is not allowed to access Admin Backoffice. Please contact the owner.";
 
@@ -98,66 +95,80 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
   return (
     <main className="auth-page">
-      <section className="auth-shell auth-shell-v4">
-        <aside className="auth-brand-v4">
-          <div className="auth-brand-wave" />
-          <div className="auth-brand-inner">
-            <div className="auth-logo-wrap auth-logo-wrap-v4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img alt="Password Vault Admin" className="auth-logo auth-logo-v4" src={BRAND_ICON_URL} />
-            </div>
+      <div className="login-wrapper">
+        <aside className="left-panel">
+          <div className="wave-1" />
+          <div className="wave-2" />
 
-            <h1 className="auth-title-v4">Password Vault</h1>
+          <div className="brand-box">
+            <div className="brand-logo">B</div>
+            <div className="brand-name">BLUEBACK</div>
+          </div>
+
+          <div className="brand-desc">
+            Keep your admin workspace secured and continue operations with controlled staff access.
           </div>
         </aside>
 
-        <section className="auth-form-v4">
-          <h2 className="auth-form-title-v4">Admin Sign In</h2>
+        <section className="right-panel">
+          <div className="login-box">
+            <h1>Welcome</h1>
+            <p className="subtitle">Login in to your account to continue</p>
 
-          {initialNotice ? <p className="info-banner mt-4 text-sm">{initialNotice}</p> : null}
+            {initialNotice ? <p className="info-banner text-sm">{initialNotice}</p> : null}
 
-          {isCheckingSession ? (
-            <p className="mt-6 text-sm auth-form-subtitle-v4">Checking your current session...</p>
-          ) : (
-            <form className="auth-form-grid-v4" onSubmit={handleSubmit}>
-              <label className="grid gap-2 text-sm font-semibold auth-label-v4">
-                Staff Email
-                <input
-                  className="admin-input"
-                  autoComplete="email"
-                  inputMode="email"
-                  name="email"
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="staff@yourcompany.com"
-                  required
-                  type="email"
-                  value={email}
-                />
-              </label>
+            {isCheckingSession ? (
+              <p className="subtitle checking-text">Checking your current session...</p>
+            ) : (
+              <form onSubmit={handleSubmit}>
+                <div className="form-group">
+                  <input
+                    autoComplete="email"
+                    className="form-control"
+                    inputMode="email"
+                    name="email"
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="Email"
+                    required
+                    type="email"
+                    value={email}
+                  />
+                </div>
 
-              <label className="grid gap-2 text-sm font-semibold auth-label-v4">
-                Password
-                <input
-                  className="admin-input"
-                  autoComplete="current-password"
-                  name="password"
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Enter your password"
-                  required
-                  type="password"
-                  value={password}
-                />
-              </label>
+                <div className="form-group">
+                  <input
+                    autoComplete="current-password"
+                    className="form-control"
+                    name="password"
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Password"
+                    required
+                    type="password"
+                    value={password}
+                  />
+                </div>
 
-              {errorMessage ? <p className="error-banner text-sm">{errorMessage}</p> : null}
+                <button className="forgot-password" onClick={(event) => event.preventDefault()} type="button">
+                  forgot your password?
+                </button>
 
-              <button className="primary-button auth-submit-v4" disabled={isSubmitting || isNavigating} type="submit">
-                {isSubmitting || isNavigating ? "Signing in..." : "Sign In to Admin"}
+                {errorMessage ? <p className="error-banner text-sm">{errorMessage}</p> : null}
+
+                <button className="login-btn" disabled={isSubmitting || isNavigating} type="submit">
+                  {isSubmitting || isNavigating ? "LOGGING IN..." : "LOG IN"}
+                </button>
+              </form>
+            )}
+
+            <div className="signup-text">
+              {"Don't have an account? "}
+              <button className="signup-link" onClick={(event) => event.preventDefault()} type="button">
+                Sign Up
               </button>
-            </form>
-          )}
+            </div>
+          </div>
         </section>
-      </section>
+      </div>
     </main>
   );
 }
