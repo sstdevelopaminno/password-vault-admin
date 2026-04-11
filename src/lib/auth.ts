@@ -1,5 +1,5 @@
-﻿import { redirect } from "next/navigation";
-import { adminAllowedRoles } from "@/lib/env";
+import { redirect } from "next/navigation";
+import { getAdminAllowedRoles } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 type ProfileRow = {
@@ -11,6 +11,7 @@ type ProfileRow = {
 };
 
 export async function requireAdminSession() {
+  const adminAllowedRoles = getAdminAllowedRoles();
   const supabase = await createServerSupabase();
   const { data: auth } = await supabase.auth.getUser();
 
