@@ -98,36 +98,40 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
   return (
     <main className="auth-page">
-      <section className="auth-shell">
-        <aside className="auth-brand panel">
-          <div className="auth-logo-wrap">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img alt="Password Vault Admin" className="auth-logo" src={BRAND_ICON_URL} />
-          </div>
-          <span className="badge">Helpdesk Backoffice</span>
-          <h1 className="mt-4 text-3xl font-extrabold tracking-tight">Password Vault Admin</h1>
-          <p className="mt-3 text-sm muted">
-            Internal support control center for IT staff. Secure access for Approver, Admin and Owner only.
-          </p>
+      <section className="auth-shell auth-shell-v4">
+        <aside className="auth-brand-v4">
+          <div className="auth-brand-wave" />
+          <div className="auth-brand-inner">
+            <div className="auth-logo-wrap auth-logo-wrap-v4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt="Password Vault Admin" className="auth-logo auth-logo-v4" src={BRAND_ICON_URL} />
+            </div>
 
-          <div className="auth-chip-list mt-4">
-            <span className="auth-chip">User Support</span>
-            <span className="auth-chip">Audit & Compliance</span>
-            <span className="auth-chip">Billing Operations</span>
+            <p className="auth-badge-v4">HELPDESK BACKOFFICE</p>
+            <h1 className="auth-title-v4">Password Vault Admin</h1>
+            <p className="auth-subtitle-v4">
+              Internal support control center for IT staff. Secure access for Approver, Admin and Owner only.
+            </p>
+          </div>
+
+          <div className="auth-chip-row-v4">
+            <span className="auth-chip-v4">User Support</span>
+            <span className="auth-chip-v4">Audit & Compliance</span>
+            <span className="auth-chip-v4">Billing Operations</span>
           </div>
         </aside>
 
-        <section className="panel auth-form-panel">
-          <h2 className="text-2xl font-bold">Admin Sign In</h2>
-          <p className="mt-2 text-sm muted">Sign in with your approved staff account to continue.</p>
+        <section className="auth-form-v4">
+          <h2 className="auth-form-title-v4">Admin Sign In</h2>
+          <p className="auth-form-subtitle-v4">Sign in with your approved staff account to continue.</p>
 
           {initialNotice ? <p className="info-banner mt-4 text-sm">{initialNotice}</p> : null}
 
           {isCheckingSession ? (
-            <p className="mt-6 text-sm muted">Checking your current session...</p>
+            <p className="mt-6 text-sm auth-form-subtitle-v4">Checking your current session...</p>
           ) : (
-            <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
-              <label className="grid gap-1.5 text-sm font-semibold">
+            <form className="auth-form-grid-v4" onSubmit={handleSubmit}>
+              <label className="grid gap-2 text-sm font-semibold auth-label-v4">
                 Staff Email
                 <input
                   className="admin-input"
@@ -142,7 +146,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
                 />
               </label>
 
-              <label className="grid gap-1.5 text-sm font-semibold">
+              <label className="grid gap-2 text-sm font-semibold auth-label-v4">
                 Password
                 <input
                   className="admin-input"
@@ -158,7 +162,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
               {errorMessage ? <p className="error-banner text-sm">{errorMessage}</p> : null}
 
-              <button className="primary-button mt-1" disabled={isSubmitting || isNavigating} type="submit">
+              <button className="primary-button auth-submit-v4" disabled={isSubmitting || isNavigating} type="submit">
                 {isSubmitting || isNavigating ? "Signing in..." : "Sign In to Admin"}
               </button>
             </form>
