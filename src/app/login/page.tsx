@@ -1,10 +1,29 @@
-﻿export default function LoginPage() {
-  return (
-    <main className="mx-auto max-w-xl px-6 py-12">
-      <h1 className="text-2xl font-semibold">Admin Login Required</h1>
-      <p className="mt-3 text-sm text-neutral-600">
-        This page is a placeholder. Next step is to wire your full sign-in flow (Supabase auth UI or custom login API).
-      </p>
-    </main>
-  );
+import { redirect } from "next/navigation";
+import { AdminLoginForm } from "@/components/admin-login-form";
+import { getAdminAllowedRoles } from "@/lib/env";
+import { createServerSupabase } from "@/lib/supabase/server";
+
+type ProfileRow = {
+  role: string;
+  status: string;
+};
+
+export default async function LoginPage() {
+  const supabase = await createServerSupabase();
+  const adminAllowedRoles = getAdminAllowedRoles();
+  const { data: auth } = await supabase.auth.getUser();
+
+  if (auth.user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role,status")
+      .eq("id", auth.user.id)
+      .maybeSingle<ProfileRow>();
+
+    if (profile && profile.status === "active" && adminAllowedRoles.includes(profile.role)) {
+      redirect("/");
+    }
+  }
+
+  return <AdminLoginForm />;
 }

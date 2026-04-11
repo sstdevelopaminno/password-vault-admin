@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DashboardLivePanels } from "@/components/dashboard-live-panels";
 import { env } from "@/lib/env";
 import { requireAdminSession } from "@/lib/auth";
 import { resolveAdminLocale, t } from "@/lib/i18n";
@@ -36,6 +37,8 @@ export default async function HomePage() {
             <p className="mt-2 text-sm muted">{t(locale, "roleControlHint")}</p>
           </article>
         </section>
+
+        <DashboardLivePanels />
 
         <section className="office-grid mt-4">
           <article className="panel col-span-12 lg:col-span-6">
