@@ -836,6 +836,14 @@ a {
   margin-bottom: 10px;
 }
 
+.auth-page .brand-logo-image {
+  width: 106px;
+  height: 106px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 10px;
+}
+
 .auth-page .brand-name {
   font-size: 24px;
   font-weight: 700;
@@ -870,10 +878,11 @@ a {
 }
 
 .auth-page .login-box h1 {
-  font-size: 42px;
+  font-size: 34px;
   color: #2f8de8;
   margin-bottom: 10px;
   font-weight: 700;
+  line-height: 1.15;
 }
 
 .auth-page .login-box p.subtitle {
