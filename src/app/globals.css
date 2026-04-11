@@ -66,10 +66,8 @@ a {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background:
-    radial-gradient(320px 320px at 16% 24%, rgba(0, 190, 255, 0.12), transparent 72%),
-    radial-gradient(320px 320px at 83% 26%, rgba(71, 123, 255, 0.11), transparent 72%);
-  filter: blur(6px);
+  background: transparent;
+  filter: none;
   pointer-events: none;
 }
 
@@ -290,9 +288,7 @@ a {
 /* Pixel-perfect sign-in pass (BlueBack reference) */
 .auth-page {
   background:
-    radial-gradient(700px 340px at 2% -20%, rgba(92, 170, 255, 0.18), transparent 64%),
-    radial-gradient(700px 340px at 98% -18%, rgba(58, 137, 255, 0.16), transparent 64%),
-    linear-gradient(160deg, #03123a 0%, #04194b 100%);
+    linear-gradient(180deg, #cfd4de 0%, #cfd4de 100%);
 }
 
 .auth-shell.auth-shell-v4 {
@@ -301,16 +297,16 @@ a {
   padding: 14px;
   gap: 16px;
   border-radius: 24px;
-  border: 1px solid rgba(67, 135, 255, 0.32);
-  background: linear-gradient(180deg, rgba(3, 28, 74, 0.78), rgba(3, 22, 60, 0.84));
-  box-shadow: 0 22px 52px rgba(2, 9, 28, 0.56);
+  border: 1px solid rgba(159, 176, 198, 0.68);
+  background: linear-gradient(180deg, rgba(199, 207, 220, 0.86), rgba(199, 207, 220, 0.92));
+  box-shadow: 0 16px 34px rgba(70, 82, 102, 0.24);
 }
 
 .auth-brand-v4 {
   min-height: 604px;
   padding: 22px 18px 20px;
   border-radius: 18px;
-  border: 1px solid rgba(146, 198, 255, 0.38);
+  border: 1px solid rgba(152, 186, 232, 0.44);
   background: linear-gradient(165deg, #57c4ff 0%, #3b8dfd 58%, #2e64ef 100%);
 }
 
@@ -340,7 +336,7 @@ a {
 
 .auth-title-v4 {
   margin-top: 14px;
-  font-size: clamp(42px, 5.4vw, 62px);
+  font-size: clamp(30px, 3.5vw, 40px);
   line-height: 1.04;
   letter-spacing: -0.02em;
 }
@@ -374,14 +370,14 @@ a {
 }
 
 .auth-form-title-v4 {
-  font-size: clamp(48px, 5.4vw, 66px);
+  font-size: clamp(26px, 3.2vw, 34px);
   color: #2b4f7d;
   letter-spacing: -0.02em;
 }
 
 .auth-form-subtitle-v4 {
   margin-top: 10px;
-  font-size: clamp(17px, 1.8vw, 24px);
+  font-size: clamp(14px, 1.3vw, 16px);
   color: #8db2e4;
 }
 
@@ -391,23 +387,23 @@ a {
 }
 
 .auth-label-v4 {
-  font-size: clamp(14px, 1.4vw, 20px);
+  font-size: clamp(13px, 1.15vw, 15px);
   color: #7c94b4;
 }
 
 .auth-page .admin-input {
-  height: 58px;
+  height: 50px;
   border-radius: 11px;
   border: 1px solid rgba(74, 100, 145, 0.22);
   background: #405a88;
   color: #dcf0ff;
-  font-size: clamp(17px, 1.7vw, 23px);
+  font-size: clamp(14px, 1.15vw, 16px);
 }
 
 .auth-page .primary-button.auth-submit-v4 {
-  height: 60px;
+  height: 52px;
   border-radius: 11px;
-  font-size: clamp(24px, 2.6vw, 32px);
+  font-size: clamp(16px, 1.3vw, 18px);
   background: linear-gradient(90deg, #3db4ff, #2e6cff);
 }
 

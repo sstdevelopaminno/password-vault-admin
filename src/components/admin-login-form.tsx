@@ -107,23 +107,12 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
               <img alt="Password Vault Admin" className="auth-logo auth-logo-v4" src={BRAND_ICON_URL} />
             </div>
 
-            <p className="auth-badge-v4">HELPDESK BACKOFFICE</p>
-            <h1 className="auth-title-v4">Password Vault Admin</h1>
-            <p className="auth-subtitle-v4">
-              Internal support control center for IT staff. Secure access for Approver, Admin and Owner only.
-            </p>
-          </div>
-
-          <div className="auth-chip-row-v4">
-            <span className="auth-chip-v4">User Support</span>
-            <span className="auth-chip-v4">Audit & Compliance</span>
-            <span className="auth-chip-v4">Billing Operations</span>
+            <h1 className="auth-title-v4">Password Vault</h1>
           </div>
         </aside>
 
         <section className="auth-form-v4">
           <h2 className="auth-form-title-v4">Admin Sign In</h2>
-          <p className="auth-form-subtitle-v4">Sign in with your approved staff account to continue.</p>
 
           {initialNotice ? <p className="info-banner mt-4 text-sm">{initialNotice}</p> : null}
 
