@@ -106,7 +106,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
           <div className="brand-box">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img alt="Blueback Logo" className="brand-logo-image" src={BRAND_LOGO_URL} />
-            <div className="brand-name">BLUEBACK</div>
+            <div className="brand-name">vault Support</div>
           </div>
 
           <div className="brand-desc">

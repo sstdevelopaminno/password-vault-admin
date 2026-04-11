@@ -837,17 +837,17 @@ a {
 }
 
 .auth-page .brand-logo-image {
-  width: 106px;
-  height: 106px;
+  width: 168px;
+  height: 168px;
   object-fit: contain;
   display: block;
-  margin: 0 auto 10px;
+  margin: 0 auto 14px;
 }
 
 .auth-page .brand-name {
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 0.4px;
 }
 
 .auth-page .brand-desc {
