@@ -8,7 +8,26 @@ type ProfileRow = {
   status: string;
 };
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function resolveNotice(params: Record<string, string | string[] | undefined>) {
+  const timeout = params.timeout;
+  const logout = params.logout;
+
+  if (timeout === "1") {
+    return "Session expired for security. Please sign in again.";
+  }
+
+  if (logout === "1") {
+    return "Signed out successfully.";
+  }
+
+  return null;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const supabase = await createServerSupabase();
   const adminAllowedRoles = getAdminAllowedRoles();
   const { data: auth } = await supabase.auth.getUser();
@@ -25,5 +44,8 @@ export default async function LoginPage() {
     }
   }
 
-  return <AdminLoginForm />;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const initialNotice = resolveNotice(resolvedSearchParams);
+
+  return <AdminLoginForm initialNotice={initialNotice} />;
 }
