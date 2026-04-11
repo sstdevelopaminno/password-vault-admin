@@ -287,6 +287,130 @@ a {
   color: #2d6097;
 }
 
+/* Pixel-perfect sign-in pass (BlueBack reference) */
+.auth-page {
+  background:
+    radial-gradient(700px 340px at 2% -20%, rgba(92, 170, 255, 0.18), transparent 64%),
+    radial-gradient(700px 340px at 98% -18%, rgba(58, 137, 255, 0.16), transparent 64%),
+    linear-gradient(160deg, #03123a 0%, #04194b 100%);
+}
+
+.auth-shell.auth-shell-v4 {
+  width: min(1120px, calc(100vw - 34px));
+  min-height: 640px;
+  padding: 14px;
+  gap: 16px;
+  border-radius: 24px;
+  border: 1px solid rgba(67, 135, 255, 0.32);
+  background: linear-gradient(180deg, rgba(3, 28, 74, 0.78), rgba(3, 22, 60, 0.84));
+  box-shadow: 0 22px 52px rgba(2, 9, 28, 0.56);
+}
+
+.auth-brand-v4 {
+  min-height: 604px;
+  padding: 22px 18px 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(146, 198, 255, 0.38);
+  background: linear-gradient(165deg, #57c4ff 0%, #3b8dfd 58%, #2e64ef 100%);
+}
+
+.auth-brand-wave {
+  background:
+    radial-gradient(340px 210px at -2% -11%, rgba(255, 255, 255, 0.34), transparent 74%),
+    radial-gradient(370px 220px at 10% -4%, rgba(255, 255, 255, 0.22), transparent 76%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 44%);
+}
+
+.auth-logo-wrap-v4 {
+  width: 102px;
+  height: 102px;
+  border-radius: 22px;
+}
+
+.auth-logo-v4 {
+  width: 66px;
+  height: 66px;
+}
+
+.auth-badge-v4 {
+  margin-top: 12px;
+  padding: 6px 12px;
+  font-size: 11px;
+}
+
+.auth-title-v4 {
+  margin-top: 14px;
+  font-size: clamp(42px, 5.4vw, 62px);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+}
+
+.auth-subtitle-v4 {
+  margin-top: 14px;
+  font-size: clamp(16px, 1.95vw, 24px);
+  line-height: 1.42;
+  color: #b8d7ff;
+}
+
+.auth-chip-row-v4 {
+  margin-top: 18px;
+  gap: 10px;
+}
+
+.auth-chip-v4 {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  background: rgba(20, 73, 159, 0.45);
+}
+
+.auth-form-v4 {
+  min-height: 604px;
+  padding: 34px 26px 28px;
+  border-radius: 18px;
+  border: 1px solid rgba(192, 213, 239, 0.84);
+  background: linear-gradient(180deg, #f4f8fd, #eaf0f9);
+}
+
+.auth-form-title-v4 {
+  font-size: clamp(48px, 5.4vw, 66px);
+  color: #2b4f7d;
+  letter-spacing: -0.02em;
+}
+
+.auth-form-subtitle-v4 {
+  margin-top: 10px;
+  font-size: clamp(17px, 1.8vw, 24px);
+  color: #8db2e4;
+}
+
+.auth-form-grid-v4 {
+  margin-top: 20px;
+  gap: 14px;
+}
+
+.auth-label-v4 {
+  font-size: clamp(14px, 1.4vw, 20px);
+  color: #7c94b4;
+}
+
+.auth-page .admin-input {
+  height: 58px;
+  border-radius: 11px;
+  border: 1px solid rgba(74, 100, 145, 0.22);
+  background: #405a88;
+  color: #dcf0ff;
+  font-size: clamp(17px, 1.7vw, 23px);
+}
+
+.auth-page .primary-button.auth-submit-v4 {
+  height: 60px;
+  border-radius: 11px;
+  font-size: clamp(24px, 2.6vw, 32px);
+  background: linear-gradient(90deg, #3db4ff, #2e6cff);
+}
+
 .office-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));

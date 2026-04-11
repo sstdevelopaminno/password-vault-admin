@@ -59,9 +59,6 @@ type AuditFilterDraft = {
 
 type AuditFilterApplied = AuditFilterDraft;
 
-const SESSION_TIMEOUT_SECONDS = 15 * 60;
-const SESSION_WARNING_SECONDS = 2 * 60;
-
 const ROLE_OPTIONS = ["user", "approver", "admin", "super_admin"] as const;
 
 function formatDateTime(value: string) {
@@ -119,15 +116,11 @@ export function DashboardLivePanels() {
   const [actingUserId, setActingUserId] = useState<string | null>(null);
   const [usersMessage, setUsersMessage] = useState<string | null>(null);
 
-  const [lastActivityAt, setLastActivityAt] = useState(() => Date.now());
-  const [remainingSeconds, setRemainingSeconds] = useState(SESSION_TIMEOUT_SECONDS);
   const [signingOut, setSigningOut] = useState(false);
 
-  const requiresSessionRenewal = remainingSeconds <= SESSION_WARNING_SECONDS;
-
   const navigateToLogin = useCallback(
-    (reason: "manual" | "timeout") => {
-      const target = reason === "timeout" ? "/login?timeout=1" : "/login?logout=1";
+    (reason: "manual" | "unauthorized") => {
+      const target = reason === "unauthorized" ? "/login?timeout=1" : "/login?logout=1";
       startTransition(() => {
         window.location.href = target;
       });
@@ -136,7 +129,7 @@ export function DashboardLivePanels() {
   );
 
   const logoutToLogin = useCallback(
-    async (reason: "manual" | "timeout") => {
+    async (reason: "manual" | "unauthorized") => {
       if (signingOut) return;
       setSigningOut(true);
 
@@ -151,7 +144,7 @@ export function DashboardLivePanels() {
   );
 
   const handleUnauthorized = useCallback(() => {
-    void logoutToLogin("timeout");
+    void logoutToLogin("unauthorized");
   }, [logoutToLogin]);
 
   const loadStats = useCallback(
@@ -270,35 +263,6 @@ export function DashboardLivePanels() {
     void loadUsers();
   }, [loadUsers]);
 
-  useEffect(() => {
-    const onActivity = () => {
-      setLastActivityAt(Date.now());
-    };
-
-    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"] as const;
-    events.forEach((eventName) => {
-      window.addEventListener(eventName, onActivity, { passive: true });
-    });
-
-    const timer = window.setInterval(() => {
-      const elapsedSeconds = Math.floor((Date.now() - lastActivityAt) / 1000);
-      const nextRemaining = Math.max(0, SESSION_TIMEOUT_SECONDS - elapsedSeconds);
-      setRemainingSeconds(nextRemaining);
-
-      if (nextRemaining <= 0) {
-        window.clearInterval(timer);
-        void logoutToLogin("timeout");
-      }
-    }, 1000);
-
-    return () => {
-      events.forEach((eventName) => {
-        window.removeEventListener(eventName, onActivity);
-      });
-      window.clearInterval(timer);
-    };
-  }, [lastActivityAt, logoutToLogin]);
-
   const filteredUsers = useMemo(() => {
     const keyword = deferredUserSearch.trim().toLowerCase();
     const baseUsers = users?.users ?? [];
@@ -386,18 +350,13 @@ export function DashboardLivePanels() {
     }
   }
 
-  const remainingMinutes = Math.floor(remainingSeconds / 60);
-  const remainingSecondsDisplay = String(remainingSeconds % 60).padStart(2, "0");
-
   return (
     <>
       <section className="panel mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold">Session Control</h3>
-            <p className="mt-1 text-sm muted">
-              Auto-lock timer: {remainingMinutes}:{remainingSecondsDisplay}
-            </p>
+            <p className="mt-1 text-sm muted">This device stays signed in until you manually sign out.</p>
           </div>
           <button
             className="danger-button"
@@ -410,12 +369,6 @@ export function DashboardLivePanels() {
             {signingOut || isNavigating ? "Signing out..." : "Sign Out"}
           </button>
         </div>
-
-        {requiresSessionRenewal ? (
-          <p className="warn-banner mt-3 text-sm">
-            Session will auto-lock soon due to inactivity. Move mouse or press a key to keep session active.
-          </p>
-        ) : null}
       </section>
 
       <section className="panel mt-4">
