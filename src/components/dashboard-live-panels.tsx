@@ -60,6 +60,15 @@ type AuditFilterDraft = {
 type AuditFilterApplied = AuditFilterDraft;
 
 const ROLE_OPTIONS = ["user", "approver", "admin", "super_admin"] as const;
+const WORKSPACE_TABS = [
+  { id: "dashboard", label: "Dashboard" },
+  { id: "audit", label: "Audit Logs" },
+  { id: "users", label: "Users & Approvals" },
+] as const;
+
+type WorkspaceTab = (typeof WORKSPACE_TABS)[number]["id"];
+type AuditSortMode = "created_desc" | "created_asc" | "action_asc" | "action_desc";
+type UserSortMode = "created_desc" | "created_asc" | "name_asc" | "name_desc" | "role_asc" | "status_asc";
 
 function formatDateTime(value: string) {
   const date = new Date(value);
@@ -79,7 +88,13 @@ function truncateText(value: string, maxLength: number) {
   return `${value.slice(0, maxLength - 1)}...`;
 }
 
-function normalizeCellText(value: unknown) {
+function normalizeApiError(body: unknown, fallbackMessage: string) {
+  if (!body || typeof body !== "object") return fallbackMessage;
+  if ("error" in body && typeof body.error === "string") return body.error;
+  return fallbackMessage;
+}
+
+function toCellText(value: unknown) {
   if (value === null || value === undefined) return "-";
   const text = typeof value === "string" ? value : String(value);
   return text.trim() || "-";
@@ -87,7 +102,7 @@ function normalizeCellText(value: unknown) {
 
 function formatAuditMeta(meta: unknown) {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
-    return normalizeCellText(meta);
+    return toCellText(meta);
   }
 
   const record = meta as Record<string, unknown>;
@@ -96,8 +111,7 @@ function formatAuditMeta(meta: unknown) {
 
   for (const key of preferredKeys) {
     if (!(key in record)) continue;
-    const value = normalizeCellText(record[key]);
-    chunks.push(`${key}: ${value}`);
+    chunks.push(`${key}: ${toCellText(record[key])}`);
     if (chunks.length >= 2) break;
   }
 
@@ -105,16 +119,15 @@ function formatAuditMeta(meta: unknown) {
 
   const fallback = Object.entries(record)
     .slice(0, 2)
-    .map(([key, value]) => `${key}: ${normalizeCellText(value)}`)
+    .map(([key, value]) => `${key}: ${toCellText(value)}`)
     .join(" | ");
 
   return fallback || "-";
 }
 
-function normalizeApiError(body: unknown, fallbackMessage: string) {
-  if (!body || typeof body !== "object") return fallbackMessage;
-  if ("error" in body && typeof body.error === "string") return body.error;
-  return fallbackMessage;
+function csvCell(value: unknown) {
+  const text = String(value ?? "");
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 export function DashboardLivePanels() {
@@ -156,6 +169,11 @@ export function DashboardLivePanels() {
   const [usersMessage, setUsersMessage] = useState<string | null>(null);
 
   const [signingOut, setSigningOut] = useState(false);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("dashboard");
+  const [auditSortMode, setAuditSortMode] = useState<AuditSortMode>("created_desc");
+  const [userSortMode, setUserSortMode] = useState<UserSortMode>("created_desc");
+  const [isExportingAudit, setIsExportingAudit] = useState(false);
+  const [isExportingUsers, setIsExportingUsers] = useState(false);
 
   const navigateToLogin = useCallback(
     (reason: "manual" | "unauthorized") => {
@@ -324,6 +342,165 @@ export function DashboardLivePanels() {
     return rows.filter((row) => row.status === "pending_approval" || row.role === "pending").length;
   }, [users?.users]);
 
+  const sortedAuditLogs = useMemo(() => {
+    const rows = [...(audit?.logs ?? [])];
+
+    rows.sort((left, right) => {
+      if (auditSortMode === "created_asc") {
+        return new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+      }
+      if (auditSortMode === "created_desc") {
+        return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+      }
+
+      const leftAction = toCellText(left.action_type).toLowerCase();
+      const rightAction = toCellText(right.action_type).toLowerCase();
+      const compare = leftAction.localeCompare(rightAction);
+      return auditSortMode === "action_asc" ? compare : -compare;
+    });
+
+    return rows;
+  }, [audit?.logs, auditSortMode]);
+
+  const sortedUsers = useMemo(() => {
+    const rows = [...filteredUsers];
+
+    rows.sort((left, right) => {
+      if (userSortMode === "created_asc") {
+        return new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+      }
+      if (userSortMode === "created_desc") {
+        return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+      }
+      if (userSortMode === "name_asc") {
+        return toCellText(left.full_name).localeCompare(toCellText(right.full_name));
+      }
+      if (userSortMode === "name_desc") {
+        return toCellText(right.full_name).localeCompare(toCellText(left.full_name));
+      }
+      if (userSortMode === "role_asc") {
+        return toCellText(left.role).localeCompare(toCellText(right.role));
+      }
+      return toCellText(left.status).localeCompare(toCellText(right.status));
+    });
+
+    return rows;
+  }, [filteredUsers, userSortMode]);
+
+  const appliedAuditChips = useMemo(() => {
+    const chips: Array<{ key: keyof AuditFilterApplied; label: string }> = [];
+
+    if (auditFilter.q) chips.push({ key: "q", label: `Search: ${auditFilter.q}` });
+    if (auditFilter.action) chips.push({ key: "action", label: `Action: ${auditFilter.action}` });
+    if (auditFilter.from) chips.push({ key: "from", label: `From: ${auditFilter.from}` });
+    if (auditFilter.to) chips.push({ key: "to", label: `To: ${auditFilter.to}` });
+    if (auditFilter.limit !== 10) chips.push({ key: "limit", label: `Rows: ${auditFilter.limit}` });
+
+    return chips;
+  }, [auditFilter]);
+
+  const appliedUsersChips = useMemo(() => {
+    const chips: Array<{ key: "search" | "pending"; label: string }> = [];
+    if (userSearch.trim()) chips.push({ key: "search", label: `Search: ${userSearch.trim()}` });
+    if (showPendingOnly) chips.push({ key: "pending", label: "Pending only" });
+    return chips;
+  }, [showPendingOnly, userSearch]);
+
+  function applyAuditFilter(next: AuditFilterApplied) {
+    setAuditCursor(null);
+    setAuditCursorStack([]);
+    setAuditDraftFilter(next);
+    setAuditFilter(next);
+  }
+
+  function removeAuditChip(key: keyof AuditFilterApplied) {
+    const next = { ...auditFilter };
+
+    if (key === "limit") {
+      next.limit = 10;
+    } else {
+      next[key] = "";
+    }
+
+    applyAuditFilter(next);
+  }
+
+  function removeUsersChip(key: "search" | "pending") {
+    if (key === "search") setUserSearch("");
+    if (key === "pending") setShowPendingOnly(false);
+  }
+
+  async function exportAuditCsv() {
+    if (isExportingAudit) return;
+    setIsExportingAudit(true);
+
+    try {
+      const params = new URLSearchParams();
+      params.set("format", "csv");
+      params.set("limit", "5000");
+      if (auditFilter.q) params.set("q", auditFilter.q);
+      if (auditFilter.action) params.set("action", auditFilter.action);
+      if (auditFilter.from) params.set("from", auditFilter.from);
+      if (auditFilter.to) params.set("to", auditFilter.to);
+
+      const response = await fetch(`/api/admin/audit-logs?${params.toString()}`, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as unknown;
+        throw new Error(normalizeApiError(body, "Unable to export audit logs."));
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const filename = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      setAuditError(error instanceof Error ? error.message : "Unable to export audit logs.");
+    } finally {
+      setIsExportingAudit(false);
+    }
+  }
+
+  async function exportUsersCsv() {
+    if (isExportingUsers) return;
+    setIsExportingUsers(true);
+
+    try {
+      const header = ["id", "full_name", "email", "role", "status", "created_at"];
+      const rows = sortedUsers.map((row) =>
+        [row.id, toCellText(row.full_name), toCellText(row.email), row.role, row.status, row.created_at].map(csvCell).join(","),
+      );
+      const csv = [header.map(csvCell).join(","), ...rows].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const objectUrl = URL.createObjectURL(blob);
+      const filename = `users-${new Date().toISOString().slice(0, 10)}.csv`;
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } finally {
+      setIsExportingUsers(false);
+    }
+  }
+
   async function patchUser(userId: string, payload: { role?: string; status?: string; fullName?: string }) {
     setUsersMessage(null);
     setActingUserId(userId);
@@ -391,6 +568,35 @@ export function DashboardLivePanels() {
 
   return (
     <>
+      <section className="panel workspace-tabs-panel mt-4">
+        <div className="workspace-head">
+          <div>
+            <h3 className="text-base font-semibold">Operations Workspace</h3>
+            <p className="mt-1 text-sm muted">Switch by responsibility: executive dashboard, audit investigations, or user control.</p>
+          </div>
+          <div className="workspace-kpi-row">
+            <span className="workspace-kpi">Total: {stats?.totalUsers ?? 0}</span>
+            <span className="workspace-kpi">Active: {stats?.activeUsers ?? 0}</span>
+            <span className="workspace-kpi">Pending: {stats?.pendingApprovals ?? 0}</span>
+          </div>
+        </div>
+
+        <div className="workspace-tabs mt-3">
+          {WORKSPACE_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              className={`workspace-tab ${activeTab === tab.id ? "workspace-tab-active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {activeTab === "dashboard" ? (
+        <>
       <section className="panel mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -461,14 +667,30 @@ export function DashboardLivePanels() {
           </div>
         )}
       </section>
+        </>
+      ) : null}
 
+      {activeTab === "audit" ? (
       <section className="panel mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold">Audit Logs</h3>
-            <p className="mt-1 text-sm muted">Filter, inspect and paginate security events.</p>
+            <p className="mt-1 text-sm muted">Filter, sort, export, and paginate security events.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="admin-input compact-input"
+              onChange={(event) => setAuditSortMode(event.target.value as AuditSortMode)}
+              value={auditSortMode}
+            >
+              <option value="created_desc">Newest First</option>
+              <option value="created_asc">Oldest First</option>
+              <option value="action_asc">Action A-Z</option>
+              <option value="action_desc">Action Z-A</option>
+            </select>
+            <button className="ghost-button" disabled={isExportingAudit} onClick={() => void exportAuditCsv()} type="button">
+              {isExportingAudit ? "Exporting..." : "Export CSV"}
+            </button>
             <button
               className="ghost-button"
               disabled={auditLoading || auditCursorStack.length === 0}
@@ -543,15 +765,23 @@ export function DashboardLivePanels() {
           <button
             className="primary-button"
             onClick={() => {
-              setAuditCursor(null);
-              setAuditCursorStack([]);
-              setAuditFilter({ ...auditDraftFilter });
+              applyAuditFilter({ ...auditDraftFilter });
             }}
             type="button"
           >
             Apply Filters
           </button>
         </div>
+
+        {appliedAuditChips.length > 0 ? (
+          <div className="chip-row mt-3">
+            {appliedAuditChips.map((chip) => (
+              <button key={chip.key} className="filter-chip" onClick={() => removeAuditChip(chip.key)} type="button">
+                {chip.label} x
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {auditError ? <p className="error-banner mt-3 text-sm">{auditError}</p> : null}
         {auditLoading ? (
@@ -572,22 +802,22 @@ export function DashboardLivePanels() {
               <tbody>
                 {(audit?.logs ?? []).length === 0 ? (
                   <tr>
-                    <td className="muted" colSpan={5}>
+                    <td className="muted" colSpan={6}>
                       No audit logs found.
                     </td>
                   </tr>
                 ) : (
-                  (audit?.logs ?? []).map((log, index) => (
+                  sortedAuditLogs.map((log, index) => (
                     <tr key={log.id}>
                       <td>{index + 1}</td>
-                      <td title={normalizeCellText(log.action_type)}>
-                        <span className="cell-ellipsis">{normalizeCellText(log.action_type)}</span>
+                      <td title={toCellText(log.action_type)}>
+                        <span className="cell-ellipsis">{toCellText(log.action_type)}</span>
                       </td>
-                      <td title={normalizeCellText(log.actor_user_id)}>
-                        <span className="cell-ellipsis">{truncateText(normalizeCellText(log.actor_user_id), 24)}</span>
+                      <td title={toCellText(log.actor_user_id)}>
+                        <span className="cell-ellipsis">{truncateText(toCellText(log.actor_user_id), 24)}</span>
                       </td>
-                      <td title={normalizeCellText(log.target_user_id)}>
-                        <span className="cell-ellipsis">{truncateText(normalizeCellText(log.target_user_id), 24)}</span>
+                      <td title={toCellText(log.target_user_id)}>
+                        <span className="cell-ellipsis">{truncateText(toCellText(log.target_user_id), 24)}</span>
                       </td>
                       <td>{formatDateTime(log.created_at)}</td>
                       <td title={formatAuditMeta(log.metadata_json)}>
@@ -601,7 +831,9 @@ export function DashboardLivePanels() {
           </div>
         )}
       </section>
+      ) : null}
 
+      {activeTab === "users" ? (
       <section className="panel mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -612,6 +844,21 @@ export function DashboardLivePanels() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="admin-input compact-input"
+              onChange={(event) => setUserSortMode(event.target.value as UserSortMode)}
+              value={userSortMode}
+            >
+              <option value="created_desc">Newest First</option>
+              <option value="created_asc">Oldest First</option>
+              <option value="name_asc">Name A-Z</option>
+              <option value="name_desc">Name Z-A</option>
+              <option value="role_asc">Role A-Z</option>
+              <option value="status_asc">Status A-Z</option>
+            </select>
+            <button className="ghost-button" disabled={isExportingUsers} onClick={() => void exportUsersCsv()} type="button">
+              {isExportingUsers ? "Exporting..." : "Export CSV"}
+            </button>
             <button
               className="ghost-button"
               disabled={usersLoading || usersCursorStack.length === 0}
@@ -670,6 +917,16 @@ export function DashboardLivePanels() {
           </button>
         </div>
 
+        {appliedUsersChips.length > 0 ? (
+          <div className="chip-row mt-3">
+            {appliedUsersChips.map((chip) => (
+              <button key={chip.key} className="filter-chip" onClick={() => removeUsersChip(chip.key)} type="button">
+                {chip.label} x
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         {usersError ? <p className="error-banner mt-3 text-sm">{usersError}</p> : null}
         {usersMessage ? <p className="success-banner mt-3 text-sm">{usersMessage}</p> : null}
 
@@ -689,20 +946,20 @@ export function DashboardLivePanels() {
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.length === 0 ? (
+                {sortedUsers.length === 0 ? (
                   <tr>
-                    <td className="muted" colSpan={5}>
+                    <td className="muted" colSpan={6}>
                       No users found for current filter.
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map((user, index) => (
+                  sortedUsers.map((user, index) => (
                     <tr key={user.id}>
                       <td>{index + 1}</td>
                       <td>
                         <p className="font-semibold">{user.full_name || "-"}</p>
-                        <p className="mt-1 text-xs muted" title={normalizeCellText(user.email)}>
-                          <span className="cell-ellipsis">{normalizeCellText(user.email)}</span>
+                        <p className="mt-1 text-xs muted" title={toCellText(user.email)}>
+                          <span className="cell-ellipsis">{toCellText(user.email)}</span>
                         </p>
                         <p className="mt-1 text-xs muted" title={user.id}>
                           <span className="cell-ellipsis">{truncateText(user.id, 24)}</span>
@@ -774,6 +1031,7 @@ export function DashboardLivePanels() {
           </div>
         )}
       </section>
+      ) : null}
     </>
   );
 }
