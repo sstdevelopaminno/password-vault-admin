@@ -15,6 +15,8 @@ const GENERIC_ACCESS_CHECK_ERROR = "Unable to verify admin access right now. Ple
 const QR_FEATURE_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED !== "false";
 const QR_POLL_MS = Number(process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS ?? "2000");
 const QR_DEBUG_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG === "true";
+const ACCESS_CHECK_MAX_RETRIES = 8;
+const ACCESS_CHECK_RETRY_BASE_MS = 300;
 
 function qrDebug(event: string, details?: Record<string, unknown>) {
   if (!QR_DEBUG_ENABLED || typeof window === "undefined") return;
@@ -106,7 +108,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
       requestId: null,
     };
 
-    while (attempts < 3) {
+    while (attempts < ACCESS_CHECK_MAX_RETRIES) {
       attempts += 1;
       const response = await fetch("/api/admin/access", {
         method: "GET",
@@ -127,11 +129,11 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
       }
 
       lastResult = current;
-      if (response.status !== 401 || attempts >= 3) {
+      if (response.status !== 401 || attempts >= ACCESS_CHECK_MAX_RETRIES) {
         return current;
       }
 
-      await new Promise((resolve) => window.setTimeout(resolve, attempts * 250));
+      await new Promise((resolve) => window.setTimeout(resolve, attempts * ACCESS_CHECK_RETRY_BASE_MS));
     }
 
     return lastResult;
@@ -404,18 +406,22 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
         const access = await checkAdminAccess();
         if (!access.ok) {
+          await supabase.auth.signOut();
+
           if (access.status === 403) {
-            await supabase.auth.signOut();
             setQrErrorMessage(GENERIC_DENY_MESSAGE);
+            setQrStatusMessage("Generating new QR for the next authorized user...");
+          } else if (access.status === 401) {
+            setQrErrorMessage(null);
+            setQrStatusMessage("Session was not ready in time. Generating a new QR...");
           } else {
-            if (access.status === 401) {
-              await supabase.auth.signOut();
-            }
-            setQrErrorMessage(access.error ?? GENERIC_ACCESS_CHECK_ERROR);
+            setQrErrorMessage(GENERIC_ACCESS_CHECK_ERROR);
+            setQrStatusMessage("Recovering QR flow and generating a new challenge...");
           }
-          setQrStatusMessage(null);
+
           setQrChallenge(null);
           setQrImageUrl(null);
+          void createQrChallenge();
           qrDebug("challenge.exchange.denied", {
             challengeRef: challenge.id.slice(0, 8).toUpperCase(),
             status: access.status,
@@ -547,7 +553,10 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         if (body.challenge.status === "rejected") {
           shouldScheduleNext = false;
           setQrErrorMessage(body.challenge.rejectedReason ?? "QR login was rejected in your app.");
-          setQrStatusMessage(null);
+          setQrStatusMessage("Generating a new QR challenge...");
+          setQrChallenge(null);
+          setQrImageUrl(null);
+          void createQrChallenge();
           return;
         }
 
@@ -651,7 +660,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
           if (access.status === 401) {
             await supabase.auth.signOut();
           }
-          setErrorMessage(access.error ?? GENERIC_ACCESS_CHECK_ERROR);
+          setErrorMessage(GENERIC_ACCESS_CHECK_ERROR);
         }
         return;
       }
