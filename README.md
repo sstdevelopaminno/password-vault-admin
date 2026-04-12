@@ -24,6 +24,20 @@ copy .env.example .env.local
 npm run dev
 ```
 
+## Bootstrap Super Admin
+1. Ensure `.env.local` includes:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+2. Optional: set fixed bootstrap values in `.env.local`:
+   - `BOOTSTRAP_SUPER_ADMIN_EMAIL`
+   - `BOOTSTRAP_SUPER_ADMIN_PASSWORD`
+   - `BOOTSTRAP_SUPER_ADMIN_AUTH_CODE`
+3. Run:
+```bash
+npm run bootstrap:super-admin
+```
+The script creates or updates the account, forces profile role to `super_admin`, sets status to `active`, and prints email/password/authority code for secure handover.
+
 ## Important Files
 - `docs/ENV_VERCEL_SUPABASE_CHECKLIST.md`
 - `docs/LEGACY_PASSWORD_VAULT_API_MAP.md`

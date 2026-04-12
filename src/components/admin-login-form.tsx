@@ -89,7 +89,17 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         router.replace("/");
         router.refresh();
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes("Invalid environment configuration")) {
+          setErrorMessage("System configuration is incomplete. Please contact administrator.");
+          return;
+        }
+
+        setErrorMessage(error.message || "Unable to sign in right now. Please try again.");
+        return;
+      }
+
       setErrorMessage("Unable to sign in right now. Please try again.");
     } finally {
       setIsSubmitting(false);
