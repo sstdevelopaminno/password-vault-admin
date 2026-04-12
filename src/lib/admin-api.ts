@@ -1,8 +1,9 @@
-import type { User } from "@supabase/supabase-js";
-import { getAdminAllowedRoles } from "@/lib/env";
+import { createClient, type User } from "@supabase/supabase-js";
+import { env, getAdminAllowedRoles } from "@/lib/env";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { ApiRequestContext } from "@/lib/api/request-context";
 import { jsonError } from "@/lib/api/response";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type ProfileRow = {
   id: string;
@@ -19,22 +20,62 @@ export type AdminApiContext = {
 
 type GuardResult = { ok: true; value: AdminApiContext } | { ok: false; response: Response };
 
-export async function requireAdminApiContext(ctx: ApiRequestContext): Promise<GuardResult> {
-  const adminAllowedRoles = getAdminAllowedRoles();
-  const supabase = await createServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
+function getBearerToken(request: Request) {
+  const header = request.headers.get("authorization");
+  if (!header?.toLowerCase().startsWith("bearer ")) return null;
+  const token = header.slice("bearer ".length).trim();
+  return token || null;
+}
 
-  if (!auth.user) {
+async function resolveAuthUserFromBearerToken(token: string) {
+  const client = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+
+  const {
+    data: { user },
+    error,
+  } = await client.auth.getUser(token);
+
+  if (error || !user) {
+    return null;
+  }
+
+  return user;
+}
+
+export async function requireAdminApiContext(ctx: ApiRequestContext, request?: Request): Promise<GuardResult> {
+  const adminAllowedRoles = getAdminAllowedRoles();
+  let authUser: User | null = null;
+
+  if (request) {
+    const bearerToken = getBearerToken(request);
+    if (bearerToken) {
+      authUser = await resolveAuthUserFromBearerToken(bearerToken);
+    }
+  }
+
+  if (!authUser) {
+    const supabase = await createServerSupabase();
+    const { data: auth } = await supabase.auth.getUser();
+    authUser = auth.user ?? null;
+  }
+
+  if (!authUser) {
     return {
       ok: false,
       response: jsonError(ctx, "Unauthorized", { status: 401 }),
     };
   }
 
-  const { data: profile, error } = await supabase
+  const admin = createAdminClient();
+  const { data: profile, error } = await admin
     .from("profiles")
     .select("id,role,status,full_name,email")
-    .eq("id", auth.user.id)
+    .eq("id", authUser.id)
     .maybeSingle<ProfileRow>();
 
   if (error || !profile) {
@@ -61,7 +102,7 @@ export async function requireAdminApiContext(ctx: ApiRequestContext): Promise<Gu
   return {
     ok: true,
     value: {
-      authUser: auth.user,
+      authUser,
       profile,
     },
   };

@@ -99,7 +99,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   const pollingAbortRef = useRef<AbortController | null>(null);
   const lastPolledStatusRef = useRef<string | null>(null);
 
-  const checkAdminAccess = useCallback(async (): Promise<AccessCheckResult> => {
+  const checkAdminAccess = useCallback(async (accessToken?: string | null): Promise<AccessCheckResult> => {
     let attempts = 0;
     let lastResult: AccessCheckResult = {
       ok: false,
@@ -114,6 +114,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         method: "GET",
         credentials: "include",
         cache: "no-store",
+        headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined,
       });
 
       const body = (await response.json().catch(() => ({}))) as AdminAccessCheckResponse;
@@ -404,7 +405,10 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
           return;
         }
 
-        const access = await checkAdminAccess();
+        const {
+          data: { session: qrSession },
+        } = await supabase.auth.getSession();
+        const access = await checkAdminAccess(qrSession?.access_token ?? null);
         if (!access.ok) {
           await supabase.auth.signOut({ scope: "local" });
 
@@ -651,7 +655,10 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         return;
       }
 
-      const access = await checkAdminAccess();
+      const {
+        data: { session: passwordSession },
+      } = await supabase.auth.getSession();
+      const access = await checkAdminAccess(passwordSession?.access_token ?? null);
       if (!access.ok) {
         if (access.status === 403) {
           await supabase.auth.signOut({ scope: "local" });

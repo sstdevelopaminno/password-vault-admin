@@ -108,7 +108,7 @@ export async function GET(request: Request) {
   const ctx = createApiRequestContext(request, ROUTE);
 
   try {
-    const guard = await requireAdminApiContext(ctx);
+    const guard = await requireAdminApiContext(ctx, request);
     if (!guard.ok) {
       logApiSuccess(ctx, guard.response.status, { guard: "blocked" });
       return guard.response;

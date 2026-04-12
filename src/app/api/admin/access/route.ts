@@ -7,7 +7,7 @@ const ROUTE = "/api/admin/access";
 
 export async function GET(request: Request) {
   const ctx = createApiRequestContext(request, ROUTE);
-  const guard = await requireAdminApiContext(ctx);
+  const guard = await requireAdminApiContext(ctx, request);
 
   if (!guard.ok) {
     logApiSuccess(ctx, guard.response.status, { guard: "blocked" });
@@ -28,4 +28,3 @@ export async function GET(request: Request) {
     { headers: { "cache-control": "no-store" } },
   );
 }
-
