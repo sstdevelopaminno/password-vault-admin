@@ -192,7 +192,7 @@ export function DashboardLivePanels() {
 
       try {
         const supabase = createBrowserSupabase();
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: "local" });
       } finally {
         navigateToLogin(reason);
       }

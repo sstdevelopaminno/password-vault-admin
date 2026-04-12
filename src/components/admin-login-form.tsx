@@ -406,7 +406,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
         const access = await checkAdminAccess();
         if (!access.ok) {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: "local" });
 
           if (access.status === 403) {
             setQrErrorMessage(GENERIC_DENY_MESSAGE);
@@ -654,11 +654,11 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
       const access = await checkAdminAccess();
       if (!access.ok) {
         if (access.status === 403) {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: "local" });
           setErrorMessage(GENERIC_DENY_MESSAGE);
         } else {
           if (access.status === 401) {
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: "local" });
           }
           setErrorMessage(GENERIC_ACCESS_CHECK_ERROR);
         }
