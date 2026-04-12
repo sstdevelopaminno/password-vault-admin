@@ -35,7 +35,7 @@ type ChallengeRow = {
 };
 
 function hasValidIntegrationSecret(request: Request) {
-  const expected = env.ADMIN_QR_LOGIN_INTEGRATION_SECRET;
+  const expected = String(env.ADMIN_QR_LOGIN_INTEGRATION_SECRET ?? "").trim();
   if (!expected) return false;
 
   const header = request.headers.get("authorization");
