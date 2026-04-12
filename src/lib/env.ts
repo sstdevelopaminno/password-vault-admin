@@ -12,6 +12,7 @@ const schema = z.object({
   LEGACY_PASSWORD_VAULT_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
   NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED: z.enum(["true", "false"]).default("true"),
   NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS: z.coerce.number().int().min(500).max(10_000).default(2_000),
+  NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG: z.enum(["true", "false"]).default("false"),
   NEXT_PUBLIC_ADMIN_QR_SCHEME: z
     .string()
     .trim()
@@ -42,6 +43,7 @@ export function getEnv(): ParsedEnv {
     LEGACY_PASSWORD_VAULT_TIMEOUT_MS: process.env.LEGACY_PASSWORD_VAULT_TIMEOUT_MS,
     NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED: process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED,
     NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS: process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS,
+    NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG: process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG,
     NEXT_PUBLIC_ADMIN_QR_SCHEME: process.env.NEXT_PUBLIC_ADMIN_QR_SCHEME,
     ADMIN_QR_LOGIN_TTL_SECONDS: process.env.ADMIN_QR_LOGIN_TTL_SECONDS,
     ADMIN_QR_LOGIN_INTEGRATION_SECRET: process.env.ADMIN_QR_LOGIN_INTEGRATION_SECRET,

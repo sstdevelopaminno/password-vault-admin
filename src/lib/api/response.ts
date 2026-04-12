@@ -25,13 +25,19 @@ export function jsonData(
 export function jsonError(
   ctx: ApiRequestContext,
   message: string,
-  options?: { status?: number; headers?: HeadersInit; code?: string },
+  options?: {
+    status?: number;
+    headers?: HeadersInit;
+    code?: string;
+    details?: Record<string, unknown>;
+  },
 ) {
   const response = NextResponse.json(
     {
       error: message,
       code: options?.code,
       requestId: ctx.requestId,
+      ...(options?.details ?? {}),
     },
     {
       status: options?.status ?? 400,

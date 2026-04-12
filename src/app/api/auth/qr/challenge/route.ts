@@ -15,6 +15,7 @@ import { writeAdminAuditEvent } from "@/lib/audit";
 
 const ROUTE = "/api/auth/qr/challenge";
 const MAX_PENDING_PER_IP_PER_MINUTE = 8;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 const requestSchema = z.object({
   deviceLabel: z.string().trim().min(1).max(120).optional(),
@@ -54,7 +55,8 @@ export async function POST(request: Request) {
 
     const requestIp = getClientIp(request);
     if (requestIp) {
-      const sinceIso = new Date(Date.now() - 60_000).toISOString();
+      const nowMs = Date.now();
+      const sinceIso = new Date(nowMs - RATE_LIMIT_WINDOW_MS).toISOString();
       const { count, error } = await admin
         .from("admin_qr_login_challenges")
         .select("id", { head: true, count: "exact" })
@@ -67,8 +69,37 @@ export async function POST(request: Request) {
       }
 
       if ((count ?? 0) >= MAX_PENDING_PER_IP_PER_MINUTE) {
-        logApiSuccess(ctx, 429, { reason: "rate_limited", requestIp });
-        return jsonError(ctx, "Too many QR requests. Please wait and try again.", { status: 429 });
+        const { data: oldestPending, error: oldestError } = await admin
+          .from("admin_qr_login_challenges")
+          .select("created_at")
+          .eq("status", "pending")
+          .eq("requested_by_ip", requestIp)
+          .gte("created_at", sinceIso)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle<{ created_at: string }>();
+
+        if (oldestError) {
+          throw oldestError;
+        }
+
+        const oldestCreatedAtMs = oldestPending ? Date.parse(oldestPending.created_at) : nowMs;
+        const elapsedMs = Math.max(0, nowMs - oldestCreatedAtMs);
+        const retryAfterSeconds = Math.max(1, Math.ceil((RATE_LIMIT_WINDOW_MS - elapsedMs) / 1000));
+
+        logApiSuccess(ctx, 429, {
+          reason: "rate_limited",
+          requestIp,
+          retryAfterSeconds,
+        });
+        return jsonError(ctx, "Too many QR requests. Please wait and try again.", {
+          status: 429,
+          headers: {
+            "cache-control": "no-store",
+            "retry-after": String(retryAfterSeconds),
+          },
+          details: { retryAfterSeconds },
+        });
       }
     }
 
@@ -122,6 +153,7 @@ export async function POST(request: Request) {
     });
 
     logApiSuccess(ctx, 201, { challengeId: inserted.id });
+    const serverNow = new Date().toISOString();
     return jsonData(
       ctx,
       {
@@ -134,6 +166,7 @@ export async function POST(request: Request) {
           qrPayload: qr.serialized,
           qrDeepLink: qr.deepLink,
           pollIntervalMs: env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS,
+          serverNow,
         },
       },
       {

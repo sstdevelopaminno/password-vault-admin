@@ -13,6 +13,19 @@ const GENERIC_DENY_MESSAGE =
 const GENERIC_QR_ERROR = "Unable to complete QR login right now. Please try again.";
 const QR_FEATURE_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED !== "false";
 const QR_POLL_MS = Number(process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS ?? "2000");
+const QR_DEBUG_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG === "true";
+
+function qrDebug(event: string, details?: Record<string, unknown>) {
+  if (!QR_DEBUG_ENABLED || typeof window === "undefined") return;
+  console.info(
+    "[QR_LOGIN]",
+    JSON.stringify({
+      at: new Date().toISOString(),
+      event,
+      ...(details ?? {}),
+    }),
+  );
+}
 
 type QrChallenge = {
   id: string;
@@ -23,10 +36,18 @@ type QrChallenge = {
   qrPayload: string;
   qrDeepLink: string;
   pollIntervalMs: number;
+  serverNow?: string;
 };
 
-type QrChallengeResponse = {
-  challenge: QrChallenge;
+type QrErrorResponse = {
+  error?: string;
+  code?: string;
+  requestId?: string;
+  retryAfterSeconds?: number;
+};
+
+type QrChallengeApiResponse = QrErrorResponse & {
+  challenge?: QrChallenge;
 };
 
 type AdminLoginFormProps = {
@@ -49,8 +70,15 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
   const [qrStatusMessage, setQrStatusMessage] = useState<string | null>(null);
   const [qrErrorMessage, setQrErrorMessage] = useState<string | null>(null);
+  const [qrRefreshCooldownSeconds, setQrRefreshCooldownSeconds] = useState(0);
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const isCompletingRef = useRef(false);
+  const isCreatingQrRef = useRef(false);
+  const qrCreateRequestIdRef = useRef(0);
+  const activeQrKeyRef = useRef<string | null>(null);
+  const pollingAbortRef = useRef<AbortController | null>(null);
+  const lastPolledStatusRef = useRef<string | null>(null);
 
   async function hasAdminAccess() {
     const response = await fetch("/api/admin/stats", {
@@ -87,6 +115,63 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
     };
   }, [router]);
 
+  const syncServerClock = useCallback((serverNowIso?: string) => {
+    if (!serverNowIso) return null;
+    const parsedServerTime = Date.parse(serverNowIso);
+    if (!Number.isFinite(parsedServerTime)) return null;
+
+    const offset = parsedServerTime - Date.now();
+    setServerClockOffsetMs(offset);
+    setClockNow(Date.now() + offset);
+    return offset;
+  }, []);
+
+  const normalizeCooldownSeconds = useCallback((value: unknown) => {
+    if (value == null) return 0;
+    const parsed =
+      typeof value === "number"
+        ? value
+        : Number.parseInt(typeof value === "string" ? value : String(value), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return Math.min(60, Math.max(1, Math.ceil(parsed)));
+  }, []);
+
+  const applyRefreshCooldown = useCallback(
+    (seconds: unknown) => {
+      const normalized = normalizeCooldownSeconds(seconds);
+      if (normalized <= 0) return 0;
+      setQrRefreshCooldownSeconds((previous) => Math.max(previous, normalized));
+      return normalized;
+    },
+    [normalizeCooldownSeconds],
+  );
+
+  const resolveRetryAfterSeconds = useCallback(
+    (response: Response, body?: QrErrorResponse) => {
+      const fromBody = normalizeCooldownSeconds(body?.retryAfterSeconds);
+      if (fromBody > 0) return fromBody;
+      const fromHeader = normalizeCooldownSeconds(response.headers.get("retry-after"));
+      if (fromHeader > 0) return fromHeader;
+      return 0;
+    },
+    [normalizeCooldownSeconds],
+  );
+
+  useEffect(() => {
+    if (qrRefreshCooldownSeconds <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setQrRefreshCooldownSeconds((previous) => {
+        if (previous <= 1) return 0;
+        return previous - 1;
+      });
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [qrRefreshCooldownSeconds]);
+
   const expiresInSeconds = useMemo(() => {
     if (!qrChallenge) return 0;
     const diff = Date.parse(qrChallenge.expiresAt) - clockNow;
@@ -97,21 +182,28 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
     if (authMode !== "qr" || !qrChallenge) return;
 
     const timer = window.setInterval(() => {
-      setClockNow(Date.now());
+      setClockNow(Date.now() + serverClockOffsetMs);
     }, 1000);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [authMode, qrChallenge]);
+  }, [authMode, qrChallenge, serverClockOffsetMs]);
 
   const createQrChallenge = useCallback(async () => {
-    if (isCreatingQr) return;
+    if (isCreatingQrRef.current) return;
+
+    const requestId = ++qrCreateRequestIdRef.current;
+    isCreatingQrRef.current = true;
+    qrDebug("challenge.create.start", { requestSerial: requestId });
 
     setQrErrorMessage(null);
     setQrStatusMessage("Preparing secure QR challenge...");
     setIsCreatingQr(true);
     setQrImageUrl(null);
+    activeQrKeyRef.current = null;
+    pollingAbortRef.current?.abort();
+    pollingAbortRef.current = null;
 
     try {
       const response = await fetch("/api/auth/qr/challenge", {
@@ -123,12 +215,34 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         cache: "no-store",
       });
 
-      const body = (await response.json().catch(() => ({}))) as QrChallengeResponse & { error?: string };
+      if (requestId !== qrCreateRequestIdRef.current) return;
+
+      const body = (await response.json().catch(() => ({}))) as QrChallengeApiResponse;
       if (!response.ok || !body.challenge) {
-        setQrErrorMessage(body.error ?? GENERIC_QR_ERROR);
+        const retryAfterSeconds = resolveRetryAfterSeconds(response, body);
+        if (response.status === 429) {
+          const cooldown = applyRefreshCooldown(retryAfterSeconds || 10);
+          setQrErrorMessage(`Too many QR requests. Please wait ${cooldown}s then refresh QR again.`);
+          qrDebug("challenge.create.rate_limited", {
+            requestSerial: requestId,
+            status: response.status,
+            retryAfterSeconds: cooldown,
+            requestId: body.requestId,
+          });
+        } else {
+          setQrErrorMessage(body.error ?? GENERIC_QR_ERROR);
+          qrDebug("challenge.create.failed", {
+            requestSerial: requestId,
+            status: response.status,
+            requestId: body.requestId,
+            error: body.error ?? GENERIC_QR_ERROR,
+          });
+        }
         setQrStatusMessage(null);
         return;
       }
+
+      syncServerClock(body.challenge.serverNow);
 
       const imageUrl = await QRCode.toDataURL(body.challenge.qrPayload, {
         width: 220,
@@ -136,26 +250,49 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         errorCorrectionLevel: "M",
       });
 
+      if (requestId !== qrCreateRequestIdRef.current) return;
+
       setQrChallenge(body.challenge);
+      lastPolledStatusRef.current = null;
       setQrImageUrl(imageUrl);
-      setClockNow(Date.now());
       setQrStatusMessage("Scan this QR in your secured user app, then tap Confirm.");
+      setQrRefreshCooldownSeconds(0);
+      qrDebug("challenge.create.success", {
+        requestSerial: requestId,
+        challengeRef: body.challenge.id.slice(0, 8).toUpperCase(),
+        expiresAt: body.challenge.expiresAt,
+      });
     } catch (error) {
+      if (requestId !== qrCreateRequestIdRef.current) return;
       if (error instanceof Error) {
         setQrErrorMessage(error.message || GENERIC_QR_ERROR);
+        qrDebug("challenge.create.error", {
+          requestSerial: requestId,
+          message: error.message || GENERIC_QR_ERROR,
+        });
       } else {
         setQrErrorMessage(GENERIC_QR_ERROR);
+        qrDebug("challenge.create.error", {
+          requestSerial: requestId,
+          message: GENERIC_QR_ERROR,
+        });
       }
       setQrStatusMessage(null);
     } finally {
-      setIsCreatingQr(false);
+      if (requestId === qrCreateRequestIdRef.current) {
+        isCreatingQrRef.current = false;
+        setIsCreatingQr(false);
+      }
     }
-  }, [isCreatingQr]);
+  }, [applyRefreshCooldown, resolveRetryAfterSeconds, syncServerClock]);
 
   const completeQrLogin = useCallback(
     async (challenge: QrChallenge) => {
       if (isCompletingRef.current) return;
       isCompletingRef.current = true;
+      qrDebug("challenge.exchange.start", {
+        challengeRef: challenge.id.slice(0, 8).toUpperCase(),
+      });
       setIsExchangingQr(true);
       setQrErrorMessage(null);
       setQrStatusMessage("Approval received. Completing secure sign-in...");
@@ -173,12 +310,17 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
         const exchangeBody = (await exchangeRes.json().catch(() => ({}))) as {
           exchange?: { tokenHash: string; type: "magiclink" };
-          error?: string;
-        };
+        } & QrErrorResponse;
 
         if (!exchangeRes.ok || !exchangeBody.exchange?.tokenHash) {
           setQrErrorMessage(exchangeBody.error ?? GENERIC_QR_ERROR);
           setQrStatusMessage(null);
+          qrDebug("challenge.exchange.failed", {
+            challengeRef: challenge.id.slice(0, 8).toUpperCase(),
+            status: exchangeRes.status,
+            requestId: exchangeBody.requestId,
+            error: exchangeBody.error ?? GENERIC_QR_ERROR,
+          });
           return;
         }
 
@@ -191,6 +333,10 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         if (error) {
           setQrErrorMessage(error.message || GENERIC_QR_ERROR);
           setQrStatusMessage(null);
+          qrDebug("challenge.exchange.verify_otp_failed", {
+            challengeRef: challenge.id.slice(0, 8).toUpperCase(),
+            message: error.message || GENERIC_QR_ERROR,
+          });
           return;
         }
 
@@ -199,9 +345,15 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
           await supabase.auth.signOut();
           setQrErrorMessage(GENERIC_DENY_MESSAGE);
           setQrStatusMessage(null);
+          qrDebug("challenge.exchange.denied", {
+            challengeRef: challenge.id.slice(0, 8).toUpperCase(),
+          });
           return;
         }
 
+        qrDebug("challenge.exchange.success", {
+          challengeRef: challenge.id.slice(0, 8).toUpperCase(),
+        });
         startTransition(() => {
           router.replace("/");
           router.refresh();
@@ -209,8 +361,16 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
       } catch (error) {
         if (error instanceof Error) {
           setQrErrorMessage(error.message || GENERIC_QR_ERROR);
+          qrDebug("challenge.exchange.error", {
+            challengeRef: challenge.id.slice(0, 8).toUpperCase(),
+            message: error.message || GENERIC_QR_ERROR,
+          });
         } else {
           setQrErrorMessage(GENERIC_QR_ERROR);
+          qrDebug("challenge.exchange.error", {
+            challengeRef: challenge.id.slice(0, 8).toUpperCase(),
+            message: GENERIC_QR_ERROR,
+          });
         }
         setQrStatusMessage(null);
       } finally {
@@ -230,25 +390,40 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   useEffect(() => {
     if (authMode !== "qr" || !qrChallenge || isCreatingQr || isExchangingQr) return;
 
+    const challengeSnapshot = qrChallenge;
+    const challengeKey = `${challengeSnapshot.id}:${challengeSnapshot.nonce}`;
+    activeQrKeyRef.current = challengeKey;
     let disposed = false;
+    let timer: number | null = null;
     const pollMs =
-      Number.isFinite(qrChallenge.pollIntervalMs) && qrChallenge.pollIntervalMs >= 500
-        ? qrChallenge.pollIntervalMs
+      Number.isFinite(challengeSnapshot.pollIntervalMs) && challengeSnapshot.pollIntervalMs >= 500
+        ? challengeSnapshot.pollIntervalMs
         : QR_POLL_MS;
+    qrDebug("challenge.poll.start", {
+      challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
+      pollMs,
+    });
 
     const poll = async () => {
-      if (disposed || isCompletingRef.current) return;
+      if (disposed || isCompletingRef.current || activeQrKeyRef.current !== challengeKey) return;
+
+      const pollController = new AbortController();
+      pollingAbortRef.current = pollController;
+      let shouldScheduleNext = true;
 
       try {
         const response = await fetch(
-          `/api/auth/qr/challenge/${qrChallenge.id}?token=${encodeURIComponent(qrChallenge.token)}&nonce=${encodeURIComponent(
-            qrChallenge.nonce,
+          `/api/auth/qr/challenge/${challengeSnapshot.id}?token=${encodeURIComponent(challengeSnapshot.token)}&nonce=${encodeURIComponent(
+            challengeSnapshot.nonce,
           )}`,
           {
             method: "GET",
             cache: "no-store",
+            signal: pollController.signal,
           },
         );
+
+        if (disposed || activeQrKeyRef.current !== challengeKey) return;
 
         const body = (await response.json().catch(() => ({}))) as {
           challenge?: {
@@ -256,58 +431,118 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
             approvedByEmail?: string | null;
             rejectedReason?: string | null;
           };
-          error?: string;
-        };
+          serverNow?: string;
+        } & QrErrorResponse;
+
+        syncServerClock(body.serverNow);
 
         if (!response.ok || !body.challenge) {
           setQrErrorMessage(body.error ?? GENERIC_QR_ERROR);
           setQrStatusMessage(null);
+          qrDebug("challenge.poll.failed", {
+            challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
+            status: response.status,
+            requestId: body.requestId,
+            error: body.error ?? GENERIC_QR_ERROR,
+          });
+          shouldScheduleNext = false;
           return;
         }
 
+        if (lastPolledStatusRef.current !== body.challenge.status) {
+          lastPolledStatusRef.current = body.challenge.status;
+          qrDebug("challenge.poll.status", {
+            challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
+            status: body.challenge.status,
+          });
+        }
+
         if (body.challenge.status === "approved") {
+          shouldScheduleNext = false;
           setQrStatusMessage(
             body.challenge.approvedByEmail
               ? `Approved by ${body.challenge.approvedByEmail}. Finalizing login...`
               : "Approval received. Finalizing login...",
           );
-          await completeQrLogin(qrChallenge);
+          await completeQrLogin(challengeSnapshot);
           return;
         }
 
         if (body.challenge.status === "rejected") {
+          shouldScheduleNext = false;
           setQrErrorMessage(body.challenge.rejectedReason ?? "QR login was rejected in your app.");
           setQrStatusMessage(null);
           return;
         }
 
         if (body.challenge.status === "expired") {
-          setQrErrorMessage("QR challenge expired. Please refresh and scan again.");
-          setQrStatusMessage(null);
+          shouldScheduleNext = false;
+          setQrErrorMessage(null);
+          setQrStatusMessage("QR challenge expired. Generating a new one...");
+          setQrChallenge(null);
+          setQrImageUrl(null);
+          qrDebug("challenge.poll.expired", {
+            challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
+          });
+          void createQrChallenge();
           return;
         }
 
         if (body.challenge.status === "consumed") {
+          shouldScheduleNext = false;
           setQrErrorMessage("QR challenge has already been used.");
           setQrStatusMessage(null);
+          return;
         }
       } catch (error) {
+        if (pollController.signal.aborted) return;
+        if (disposed || activeQrKeyRef.current !== challengeKey) return;
+
         if (error instanceof Error) {
           setQrErrorMessage(error.message || GENERIC_QR_ERROR);
+          qrDebug("challenge.poll.error", {
+            challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
+            message: error.message || GENERIC_QR_ERROR,
+          });
         } else {
           setQrErrorMessage(GENERIC_QR_ERROR);
+          qrDebug("challenge.poll.error", {
+            challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
+            message: GENERIC_QR_ERROR,
+          });
         }
         setQrStatusMessage(null);
+        shouldScheduleNext = false;
+      } finally {
+        if (pollingAbortRef.current === pollController) {
+          pollingAbortRef.current = null;
+        }
+
+        if (shouldScheduleNext && !disposed && !isCompletingRef.current && activeQrKeyRef.current === challengeKey) {
+          timer = window.setTimeout(() => void poll(), pollMs);
+        }
       }
     };
 
     void poll();
-    const timer = window.setInterval(() => void poll(), pollMs);
+
     return () => {
       disposed = true;
-      window.clearInterval(timer);
+      if (timer !== null) {
+        window.clearTimeout(timer);
+      }
+      if (pollingAbortRef.current) {
+        pollingAbortRef.current.abort();
+        pollingAbortRef.current = null;
+      }
+      if (activeQrKeyRef.current === challengeKey) {
+        activeQrKeyRef.current = null;
+      }
+      qrDebug("challenge.poll.stop", {
+        challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
+      });
     };
-  }, [authMode, completeQrLogin, isCreatingQr, isExchangingQr, qrChallenge]);
+  }, [authMode, completeQrLogin, createQrChallenge, isCreatingQr, isExchangingQr, qrChallenge, syncServerClock]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -479,13 +714,21 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
                     ) : null}
 
                     {qrStatusMessage ? <p className="info-banner text-sm">{qrStatusMessage}</p> : null}
+                    {qrRefreshCooldownSeconds > 0 ? (
+                      <p className="info-banner text-sm">
+                        Rate limited. You can refresh QR again in {qrRefreshCooldownSeconds}s.
+                      </p>
+                    ) : null}
                     {qrErrorMessage ? <p className="error-banner text-sm">{qrErrorMessage}</p> : null}
 
                     <div className="qr-actions">
                       <button
                         className="login-btn qr-refresh-btn"
-                        disabled={isCreatingQr || isExchangingQr || isNavigating}
+                        disabled={isCreatingQr || isExchangingQr || isNavigating || qrRefreshCooldownSeconds > 0}
                         onClick={() => {
+                          qrDebug("challenge.refresh.click", {
+                            cooldownSeconds: qrRefreshCooldownSeconds,
+                          });
                           setQrErrorMessage(null);
                           setQrStatusMessage(null);
                           setQrChallenge(null);
@@ -494,7 +737,11 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
                         }}
                         type="button"
                       >
-                        {isCreatingQr ? "REFRESHING..." : "REFRESH QR"}
+                        {isCreatingQr
+                          ? "REFRESHING..."
+                          : qrRefreshCooldownSeconds > 0
+                            ? `WAIT ${qrRefreshCooldownSeconds}S`
+                            : "REFRESH QR"}
                       </button>
                       {qrChallenge?.qrDeepLink ? (
                         <a className="qr-open-app-link" href={qrChallenge.qrDeepLink}>

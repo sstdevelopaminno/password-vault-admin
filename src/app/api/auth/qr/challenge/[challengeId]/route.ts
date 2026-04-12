@@ -74,9 +74,11 @@ export async function GET(
     }
 
     logApiSuccess(ctx, 200, { challengeId: challenge.id, status });
+    const serverNow = new Date().toISOString();
     return jsonData(
       ctx,
       {
+        serverNow,
         challenge: {
           id: challenge.id,
           status,
