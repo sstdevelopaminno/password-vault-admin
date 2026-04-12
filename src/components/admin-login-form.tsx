@@ -11,6 +11,7 @@ const BRAND_LOGO_URL =
 const GENERIC_DENY_MESSAGE =
   "This account is not allowed to access Admin Backoffice. Please contact the owner.";
 const GENERIC_QR_ERROR = "Unable to complete QR login right now. Please try again.";
+const GENERIC_ACCESS_CHECK_ERROR = "Unable to verify admin access right now. Please try again.";
 const QR_FEATURE_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED !== "false";
 const QR_POLL_MS = Number(process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS ?? "2000");
 const QR_DEBUG_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG === "true";
@@ -50,6 +51,22 @@ type QrChallengeApiResponse = QrErrorResponse & {
   challenge?: QrChallenge;
 };
 
+type AdminAccessCheckResponse = QrErrorResponse & {
+  ok?: boolean;
+  profile?: {
+    id: string;
+    role: string;
+    status: string;
+  };
+};
+
+type AccessCheckResult = {
+  ok: boolean;
+  status: number;
+  error: string | null;
+  requestId: string | null;
+};
+
 type AdminLoginFormProps = {
   initialNotice?: string | null;
 };
@@ -80,24 +97,62 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   const pollingAbortRef = useRef<AbortController | null>(null);
   const lastPolledStatusRef = useRef<string | null>(null);
 
-  async function hasAdminAccess() {
-    const response = await fetch("/api/admin/stats", {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-    });
+  const checkAdminAccess = useCallback(async (): Promise<AccessCheckResult> => {
+    let attempts = 0;
+    let lastResult: AccessCheckResult = {
+      ok: false,
+      status: 0,
+      error: null,
+      requestId: null,
+    };
 
-    return response.ok;
-  }
+    while (attempts < 3) {
+      attempts += 1;
+      const response = await fetch("/api/admin/access", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      const body = (await response.json().catch(() => ({}))) as AdminAccessCheckResponse;
+      const current: AccessCheckResult = {
+        ok: response.ok && body.ok === true,
+        status: response.status,
+        error: body.error ?? null,
+        requestId: body.requestId ?? null,
+      };
+
+      if (current.ok) {
+        return current;
+      }
+
+      lastResult = current;
+      if (response.status !== 401 || attempts >= 3) {
+        return current;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, attempts * 250));
+    }
+
+    return lastResult;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function checkCurrentSession() {
-      const allowed = await hasAdminAccess().catch(() => false);
+      const result = await checkAdminAccess().catch(
+        () =>
+          ({
+            ok: false,
+            status: 0,
+            error: null,
+            requestId: null,
+          }) satisfies AccessCheckResult,
+      );
       if (cancelled) return;
 
-      if (allowed) {
+      if (result.ok) {
         startTransition(() => {
           router.replace("/");
           router.refresh();
@@ -113,7 +168,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [checkAdminAccess, router]);
 
   const syncServerClock = useCallback((serverNowIso?: string) => {
     if (!serverNowIso) return null;
@@ -315,6 +370,11 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         if (!exchangeRes.ok || !exchangeBody.exchange?.tokenHash) {
           setQrErrorMessage(exchangeBody.error ?? GENERIC_QR_ERROR);
           setQrStatusMessage(null);
+          if (exchangeRes.status === 409) {
+            setQrChallenge(null);
+            setQrImageUrl(null);
+            void createQrChallenge();
+          }
           qrDebug("challenge.exchange.failed", {
             challengeRef: challenge.id.slice(0, 8).toUpperCase(),
             status: exchangeRes.status,
@@ -333,6 +393,8 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         if (error) {
           setQrErrorMessage(error.message || GENERIC_QR_ERROR);
           setQrStatusMessage(null);
+          setQrChallenge(null);
+          setQrImageUrl(null);
           qrDebug("challenge.exchange.verify_otp_failed", {
             challengeRef: challenge.id.slice(0, 8).toUpperCase(),
             message: error.message || GENERIC_QR_ERROR,
@@ -340,13 +402,25 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
           return;
         }
 
-        const allowed = await hasAdminAccess();
-        if (!allowed) {
-          await supabase.auth.signOut();
-          setQrErrorMessage(GENERIC_DENY_MESSAGE);
+        const access = await checkAdminAccess();
+        if (!access.ok) {
+          if (access.status === 403) {
+            await supabase.auth.signOut();
+            setQrErrorMessage(GENERIC_DENY_MESSAGE);
+          } else {
+            if (access.status === 401) {
+              await supabase.auth.signOut();
+            }
+            setQrErrorMessage(access.error ?? GENERIC_ACCESS_CHECK_ERROR);
+          }
           setQrStatusMessage(null);
+          setQrChallenge(null);
+          setQrImageUrl(null);
           qrDebug("challenge.exchange.denied", {
             challengeRef: challenge.id.slice(0, 8).toUpperCase(),
+            status: access.status,
+            requestId: access.requestId,
+            error: access.error,
           });
           return;
         }
@@ -373,12 +447,14 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
           });
         }
         setQrStatusMessage(null);
+        setQrChallenge(null);
+        setQrImageUrl(null);
       } finally {
         setIsExchangingQr(false);
         isCompletingRef.current = false;
       }
     },
-    [router],
+    [checkAdminAccess, createQrChallenge, router],
   );
 
   useEffect(() => {
@@ -490,8 +566,11 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
         if (body.challenge.status === "consumed") {
           shouldScheduleNext = false;
-          setQrErrorMessage("QR challenge has already been used.");
-          setQrStatusMessage(null);
+          setQrErrorMessage(null);
+          setQrStatusMessage("QR challenge was already used. Generating a new one...");
+          setQrChallenge(null);
+          setQrImageUrl(null);
+          void createQrChallenge();
           return;
         }
       } catch (error) {
@@ -563,10 +642,17 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         return;
       }
 
-      const allowed = await hasAdminAccess();
-      if (!allowed) {
-        await supabase.auth.signOut();
-        setErrorMessage(GENERIC_DENY_MESSAGE);
+      const access = await checkAdminAccess();
+      if (!access.ok) {
+        if (access.status === 403) {
+          await supabase.auth.signOut();
+          setErrorMessage(GENERIC_DENY_MESSAGE);
+        } else {
+          if (access.status === 401) {
+            await supabase.auth.signOut();
+          }
+          setErrorMessage(access.error ?? GENERIC_ACCESS_CHECK_ERROR);
+        }
         return;
       }
 
