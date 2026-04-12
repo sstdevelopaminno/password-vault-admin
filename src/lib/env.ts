@@ -21,7 +21,20 @@ export function getEnv(): ParsedEnv {
     return envCache;
   }
 
-  const parsed = schema.safeParse(process.env);
+  // Read env keys explicitly so Next.js can inline NEXT_PUBLIC_* values in client bundles.
+  const runtimeEnv = {
+    NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME,
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    ADMIN_ALLOWED_ROLES: process.env.ADMIN_ALLOWED_ROLES,
+    ADMIN_API_SOURCE: process.env.ADMIN_API_SOURCE,
+    ADMIN_STATS_CACHE_MS: process.env.ADMIN_STATS_CACHE_MS,
+    LEGACY_PASSWORD_VAULT_API_BASE_URL: process.env.LEGACY_PASSWORD_VAULT_API_BASE_URL,
+    LEGACY_PASSWORD_VAULT_TIMEOUT_MS: process.env.LEGACY_PASSWORD_VAULT_TIMEOUT_MS,
+  };
+
+  const parsed = schema.safeParse(runtimeEnv);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
     throw new Error(`Invalid environment configuration: ${issues}`);
