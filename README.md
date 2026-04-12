@@ -41,6 +41,7 @@ The script creates or updates the account, forces profile role to `super_admin`,
 ## Important Files
 - `docs/ENV_VERCEL_SUPABASE_CHECKLIST.md`
 - `docs/LEGACY_PASSWORD_VAULT_API_MAP.md`
+- `docs/QR_LOGIN_INTEGRATION.md`
 - `src/lib/env.ts`
 - `src/lib/auth.ts`
 

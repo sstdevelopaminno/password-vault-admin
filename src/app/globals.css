@@ -1017,6 +1017,37 @@ a {
   margin-top: 6px;
 }
 
+.auth-page .auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.auth-page .auth-mode-btn {
+  border: 1px solid #cfd5de;
+  background: #f6f8fb;
+  color: #48617f;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  height: 38px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auth-page .auth-mode-btn.is-active {
+  border-color: #2f8de8;
+  background: rgba(47, 141, 232, 0.12);
+  color: #1b5fa3;
+}
+
+.auth-page .auth-mode-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .auth-page .form-group {
   margin-bottom: 18px;
 }
@@ -1118,6 +1149,86 @@ a {
   border-radius: 12px;
 }
 
+.auth-page .qr-login-panel {
+  text-align: left;
+}
+
+.auth-page .qr-helper-text {
+  color: #5a6781;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.auth-page .qr-canvas-wrap {
+  border: 1px solid #d4deeb;
+  background: #f9fbff;
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+}
+
+.auth-page .qr-canvas {
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
+  display: block;
+}
+
+.auth-page .qr-canvas-placeholder {
+  border: 1px dashed #b8c8dc;
+  background: #f8fbff;
+  border-radius: 14px;
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  color: #6a7b95;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.auth-page .qr-challenge-meta {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: #f6faff;
+  border: 1px solid #d6e6fa;
+  border-radius: 12px;
+  color: #3e5c7f;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.auth-page .qr-challenge-meta p {
+  margin: 0;
+}
+
+.auth-page .qr-challenge-meta code {
+  font-family: "Consolas", "Courier New", monospace;
+}
+
+.auth-page .qr-actions {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-page .qr-refresh-btn {
+  min-width: 150px;
+}
+
+.auth-page .qr-open-app-link {
+  color: #2f8de8;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.auth-page .qr-open-app-link:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 768px) {
   .auth-page .login-wrapper {
     flex-direction: column;
@@ -1141,5 +1252,10 @@ a {
 
   .auth-page .login-box h1 {
     font-size: 34px;
+  }
+
+  .auth-page .qr-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

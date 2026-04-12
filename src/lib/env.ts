@@ -10,6 +10,14 @@ const schema = z.object({
   ADMIN_STATS_CACHE_MS: z.coerce.number().int().min(0).default(15_000),
   LEGACY_PASSWORD_VAULT_API_BASE_URL: z.string().url().optional(),
   LEGACY_PASSWORD_VAULT_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED: z.enum(["true", "false"]).default("true"),
+  NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS: z.coerce.number().int().min(500).max(10_000).default(2_000),
+  NEXT_PUBLIC_ADMIN_QR_SCHEME: z
+    .string()
+    .trim()
+    .default("password-vault://admin-qr-login"),
+  ADMIN_QR_LOGIN_TTL_SECONDS: z.coerce.number().int().min(30).max(600).default(180),
+  ADMIN_QR_LOGIN_INTEGRATION_SECRET: z.string().min(16).optional(),
 });
 
 type ParsedEnv = z.infer<typeof schema>;
@@ -32,6 +40,11 @@ export function getEnv(): ParsedEnv {
     ADMIN_STATS_CACHE_MS: process.env.ADMIN_STATS_CACHE_MS,
     LEGACY_PASSWORD_VAULT_API_BASE_URL: process.env.LEGACY_PASSWORD_VAULT_API_BASE_URL,
     LEGACY_PASSWORD_VAULT_TIMEOUT_MS: process.env.LEGACY_PASSWORD_VAULT_TIMEOUT_MS,
+    NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED: process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED,
+    NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS: process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS,
+    NEXT_PUBLIC_ADMIN_QR_SCHEME: process.env.NEXT_PUBLIC_ADMIN_QR_SCHEME,
+    ADMIN_QR_LOGIN_TTL_SECONDS: process.env.ADMIN_QR_LOGIN_TTL_SECONDS,
+    ADMIN_QR_LOGIN_INTEGRATION_SECRET: process.env.ADMIN_QR_LOGIN_INTEGRATION_SECRET,
   };
 
   const parsed = schema.safeParse(runtimeEnv);
@@ -55,4 +68,8 @@ export function getAdminAllowedRoles() {
     .ADMIN_ALLOWED_ROLES.split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+export function isAdminQrLoginEnabled() {
+  return getEnv().NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED === "true";
 }

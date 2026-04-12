@@ -15,6 +15,11 @@
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ADMIN_ALLOWED_ROLES` (default: `approver,admin,super_admin`)
+- `NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED` (default: `true`)
+- `NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS` (default: `2000`)
+- `NEXT_PUBLIC_ADMIN_QR_SCHEME` (default: `password-vault://admin-qr-login`)
+- `ADMIN_QR_LOGIN_TTL_SECONDS` (default: `180`)
+- `ADMIN_QR_LOGIN_INTEGRATION_SECRET` (required if using QR login approval from user app backend)
 
 ## 4) Security Controls
 - Keep `SUPABASE_SERVICE_ROLE_KEY` only in server routes/actions.
