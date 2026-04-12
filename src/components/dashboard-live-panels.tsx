@@ -64,12 +64,51 @@ const ROLE_OPTIONS = ["user", "approver", "admin", "super_admin"] as const;
 function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleString("th-TH", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function truncateText(value: string, maxLength: number) {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1)}...`;
+}
+
+function normalizeCellText(value: unknown) {
+  if (value === null || value === undefined) return "-";
+  const text = typeof value === "string" ? value : String(value);
+  return text.trim() || "-";
+}
+
+function formatAuditMeta(meta: unknown) {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+    return normalizeCellText(meta);
+  }
+
+  const record = meta as Record<string, unknown>;
+  const preferredKeys = ["action", "title", "target_vault_item_id", "note_id", "ip", "source"];
+  const chunks: string[] = [];
+
+  for (const key of preferredKeys) {
+    if (!(key in record)) continue;
+    const value = normalizeCellText(record[key]);
+    chunks.push(`${key}: ${value}`);
+    if (chunks.length >= 2) break;
+  }
+
+  if (chunks.length) return chunks.join(" | ");
+
+  const fallback = Object.entries(record)
+    .slice(0, 2)
+    .map(([key, value]) => `${key}: ${normalizeCellText(value)}`)
+    .join(" | ");
+
+  return fallback || "-";
 }
 
 function normalizeApiError(body: unknown, fallbackMessage: string) {
@@ -460,7 +499,7 @@ export function DashboardLivePanels() {
           </div>
         </div>
 
-        <div className="filter-grid mt-4">
+        <div className="filter-grid audit-filter-grid mt-4">
           <input
             className="admin-input"
             onChange={(event) => setAuditDraftFilter((prev) => ({ ...prev, q: event.target.value }))}
@@ -518,10 +557,11 @@ export function DashboardLivePanels() {
         {auditLoading ? (
           <p className="mt-4 text-sm muted">Loading audit logs...</p>
         ) : (
-          <div className="table-shell mt-4 overflow-x-auto">
+          <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table">
               <thead>
                 <tr>
+                  <th>#</th>
                   <th>Action</th>
                   <th>Actor</th>
                   <th>Target User</th>
@@ -537,13 +577,22 @@ export function DashboardLivePanels() {
                     </td>
                   </tr>
                 ) : (
-                  (audit?.logs ?? []).map((log) => (
+                  (audit?.logs ?? []).map((log, index) => (
                     <tr key={log.id}>
-                      <td>{log.action_type ?? "-"}</td>
-                      <td>{truncateText(log.actor_user_id ?? "-", 18)}</td>
-                      <td>{truncateText(log.target_user_id ?? "-", 18)}</td>
+                      <td>{index + 1}</td>
+                      <td title={normalizeCellText(log.action_type)}>
+                        <span className="cell-ellipsis">{normalizeCellText(log.action_type)}</span>
+                      </td>
+                      <td title={normalizeCellText(log.actor_user_id)}>
+                        <span className="cell-ellipsis">{truncateText(normalizeCellText(log.actor_user_id), 24)}</span>
+                      </td>
+                      <td title={normalizeCellText(log.target_user_id)}>
+                        <span className="cell-ellipsis">{truncateText(normalizeCellText(log.target_user_id), 24)}</span>
+                      </td>
                       <td>{formatDateTime(log.created_at)}</td>
-                      <td>{truncateText(JSON.stringify(log.metadata_json ?? {}), 68)}</td>
+                      <td title={formatAuditMeta(log.metadata_json)}>
+                        <span className="cell-ellipsis">{truncateText(formatAuditMeta(log.metadata_json), 88)}</span>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -593,7 +642,7 @@ export function DashboardLivePanels() {
           </div>
         </div>
 
-        <div className="filter-grid mt-4">
+        <div className="filter-grid users-filter-grid mt-4">
           <input
             className="admin-input"
             onChange={(event) => setUserSearch(event.target.value)}
@@ -627,10 +676,11 @@ export function DashboardLivePanels() {
         {usersLoading ? (
           <p className="mt-4 text-sm muted">Loading users...</p>
         ) : (
-          <div className="table-shell mt-4 overflow-x-auto">
+          <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
               <thead>
                 <tr>
+                  <th>#</th>
                   <th>User</th>
                   <th>Role</th>
                   <th>Status</th>
@@ -646,12 +696,17 @@ export function DashboardLivePanels() {
                     </td>
                   </tr>
                 ) : (
-                  filteredUsers.map((user) => (
+                  filteredUsers.map((user, index) => (
                     <tr key={user.id}>
+                      <td>{index + 1}</td>
                       <td>
                         <p className="font-semibold">{user.full_name || "-"}</p>
-                        <p className="mt-1 text-xs muted">{user.email || "-"}</p>
-                        <p className="mt-1 text-xs muted">{truncateText(user.id, 22)}</p>
+                        <p className="mt-1 text-xs muted" title={normalizeCellText(user.email)}>
+                          <span className="cell-ellipsis">{normalizeCellText(user.email)}</span>
+                        </p>
+                        <p className="mt-1 text-xs muted" title={user.id}>
+                          <span className="cell-ellipsis">{truncateText(user.id, 24)}</span>
+                        </p>
                       </td>
                       <td>
                         <select

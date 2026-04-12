@@ -566,6 +566,15 @@ a {
   gap: 10px;
 }
 
+.audit-filter-grid {
+  grid-template-columns: minmax(180px, 1.2fr) minmax(160px, 1fr) minmax(130px, 0.9fr) minmax(130px, 0.9fr) minmax(110px, 0.8fr) minmax(150px, auto);
+}
+
+.users-filter-grid {
+  grid-template-columns: minmax(220px, 2fr) minmax(180px, 1.2fr) minmax(150px, auto);
+  align-items: center;
+}
+
 .inline-toggle {
   display: inline-flex;
   align-items: center;
@@ -612,6 +621,11 @@ a {
   background: rgba(255, 255, 255, 0.8);
 }
 
+.table-scroll {
+  max-height: 440px;
+  overflow: auto;
+}
+
 .audit-table {
   width: 100%;
   border-collapse: collapse;
@@ -624,6 +638,7 @@ a {
   padding: 10px 12px;
   border-bottom: 1px solid var(--line-soft);
   font-size: 13px;
+  vertical-align: top;
 }
 
 .audit-table th {
@@ -632,10 +647,17 @@ a {
   text-transform: uppercase;
   color: var(--text-muted);
   background: rgba(233, 241, 251, 0.68);
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .audit-table tbody tr:hover {
   background: rgba(233, 241, 251, 0.35);
+}
+
+.audit-table tbody tr:nth-child(even) {
+  background: rgba(243, 248, 255, 0.6);
 }
 
 .audit-table tbody tr:last-child td {
@@ -644,6 +666,14 @@ a {
 
 .users-table td {
   vertical-align: top;
+}
+
+.cell-ellipsis {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .compact-input {
@@ -702,6 +732,11 @@ a {
 
   .filter-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .audit-filter-grid,
+  .users-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .auth-shell {
