@@ -15,10 +15,14 @@ const GENERIC_ACCESS_CHECK_ERROR = "Unable to verify admin access right now. Ple
 const GENERIC_QR_TIMEOUT_MESSAGE = "QR login timed out. Please start QR login again.";
 const QR_FEATURE_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED !== "false";
 const QR_POLL_MS = Number(process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS ?? "2000");
+const QR_SESSION_TIMEOUT_SECONDS_RAW = Number(process.env.NEXT_PUBLIC_ADMIN_QR_SESSION_TIMEOUT_SECONDS ?? "120");
+const QR_SESSION_TIMEOUT_SECONDS = Number.isFinite(QR_SESSION_TIMEOUT_SECONDS_RAW)
+  ? Math.min(600, Math.max(30, Math.floor(QR_SESSION_TIMEOUT_SECONDS_RAW)))
+  : 120;
 const QR_DEBUG_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG === "true";
 const ACCESS_CHECK_MAX_RETRIES = 8;
 const ACCESS_CHECK_RETRY_BASE_MS = 300;
-const QR_SESSION_TIMEOUT_MS = 120_000;
+const QR_SESSION_TIMEOUT_MS = QR_SESSION_TIMEOUT_SECONDS * 1000;
 
 function qrDebug(event: string, details?: Record<string, unknown>) {
   if (!QR_DEBUG_ENABLED || typeof window === "undefined") return;
