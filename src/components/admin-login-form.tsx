@@ -12,11 +12,13 @@ const GENERIC_DENY_MESSAGE =
   "This account is not allowed to access Admin Backoffice. Please contact the owner.";
 const GENERIC_QR_ERROR = "Unable to complete QR login right now. Please try again.";
 const GENERIC_ACCESS_CHECK_ERROR = "Unable to verify admin access right now. Please try again.";
+const GENERIC_QR_TIMEOUT_MESSAGE = "QR login timed out. Please start QR login again.";
 const QR_FEATURE_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED !== "false";
 const QR_POLL_MS = Number(process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS ?? "2000");
 const QR_DEBUG_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG === "true";
 const ACCESS_CHECK_MAX_RETRIES = 8;
 const ACCESS_CHECK_RETRY_BASE_MS = 300;
+const QR_SESSION_TIMEOUT_MS = 120_000;
 
 function qrDebug(event: string, details?: Record<string, unknown>) {
   if (!QR_DEBUG_ENABLED || typeof window === "undefined") return;
@@ -90,6 +92,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   const [qrStatusMessage, setQrStatusMessage] = useState<string | null>(null);
   const [qrErrorMessage, setQrErrorMessage] = useState<string | null>(null);
   const [qrRefreshCooldownSeconds, setQrRefreshCooldownSeconds] = useState(0);
+  const [qrSessionStartedAtMs, setQrSessionStartedAtMs] = useState<number | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const isCompletingRef = useRef(false);
@@ -98,6 +101,33 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   const activeQrKeyRef = useRef<string | null>(null);
   const pollingAbortRef = useRef<AbortController | null>(null);
   const lastPolledStatusRef = useRef<string | null>(null);
+
+  const resetQrFlowState = useCallback(() => {
+    activeQrKeyRef.current = null;
+    pollingAbortRef.current?.abort();
+    pollingAbortRef.current = null;
+    qrCreateRequestIdRef.current += 1;
+    isCreatingQrRef.current = false;
+    setIsCreatingQr(false);
+    setQrChallenge(null);
+    setQrImageUrl(null);
+    lastPolledStatusRef.current = null;
+  }, []);
+
+  const switchToPasswordMode = useCallback(
+    (message?: string | null) => {
+      resetQrFlowState();
+      setQrStatusMessage(null);
+      setQrErrorMessage(null);
+      setQrRefreshCooldownSeconds(0);
+      setQrSessionStartedAtMs(null);
+      setAuthMode("password");
+      if (message) {
+        setErrorMessage(message);
+      }
+    },
+    [resetQrFlowState],
+  );
 
   const checkAdminAccess = useCallback(async (accessToken?: string | null): Promise<AccessCheckResult> => {
     let attempts = 0;
@@ -255,9 +285,11 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
     isCreatingQrRef.current = true;
     qrDebug("challenge.create.start", { requestSerial: requestId });
 
+    setErrorMessage(null);
     setQrErrorMessage(null);
     setQrStatusMessage("Preparing secure QR challenge...");
     setIsCreatingQr(true);
+    setQrSessionStartedAtMs(Date.now());
     setQrImageUrl(null);
     activeQrKeyRef.current = null;
     pollingAbortRef.current?.abort();
@@ -374,9 +406,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
           setQrErrorMessage(exchangeBody.error ?? GENERIC_QR_ERROR);
           setQrStatusMessage(null);
           if (exchangeRes.status === 409) {
-            setQrChallenge(null);
-            setQrImageUrl(null);
-            void createQrChallenge();
+            switchToPasswordMode(exchangeBody.error ?? GENERIC_QR_ERROR);
           }
           qrDebug("challenge.exchange.failed", {
             challengeRef: challenge.id.slice(0, 8).toUpperCase(),
@@ -411,21 +441,13 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         const access = await checkAdminAccess(qrSession?.access_token ?? null);
         if (!access.ok) {
           await supabase.auth.signOut({ scope: "local" });
-
-          if (access.status === 403) {
-            setQrErrorMessage(GENERIC_DENY_MESSAGE);
-            setQrStatusMessage("Generating new QR for the next authorized user...");
-          } else if (access.status === 401) {
-            setQrErrorMessage(null);
-            setQrStatusMessage("Session was not ready in time. Generating a new QR...");
-          } else {
-            setQrErrorMessage(GENERIC_ACCESS_CHECK_ERROR);
-            setQrStatusMessage("Recovering QR flow and generating a new challenge...");
-          }
-
-          setQrChallenge(null);
-          setQrImageUrl(null);
-          void createQrChallenge();
+          const accessErrorMessage =
+            access.status === 403
+              ? GENERIC_DENY_MESSAGE
+              : access.status === 401
+                ? GENERIC_QR_TIMEOUT_MESSAGE
+                : GENERIC_ACCESS_CHECK_ERROR;
+          switchToPasswordMode(accessErrorMessage);
           qrDebug("challenge.exchange.denied", {
             challengeRef: challenge.id.slice(0, 8).toUpperCase(),
             status: access.status,
@@ -444,34 +466,46 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         });
       } catch (error) {
         if (error instanceof Error) {
-          setQrErrorMessage(error.message || GENERIC_QR_ERROR);
+          switchToPasswordMode(error.message || GENERIC_QR_ERROR);
           qrDebug("challenge.exchange.error", {
             challengeRef: challenge.id.slice(0, 8).toUpperCase(),
             message: error.message || GENERIC_QR_ERROR,
           });
         } else {
-          setQrErrorMessage(GENERIC_QR_ERROR);
+          switchToPasswordMode(GENERIC_QR_ERROR);
           qrDebug("challenge.exchange.error", {
             challengeRef: challenge.id.slice(0, 8).toUpperCase(),
             message: GENERIC_QR_ERROR,
           });
         }
-        setQrStatusMessage(null);
-        setQrChallenge(null);
-        setQrImageUrl(null);
       } finally {
         setIsExchangingQr(false);
         isCompletingRef.current = false;
       }
     },
-    [checkAdminAccess, createQrChallenge, router],
+    [checkAdminAccess, router, switchToPasswordMode],
   );
 
   useEffect(() => {
-    if (authMode !== "qr" || !QR_FEATURE_ENABLED) return;
-    if (isCheckingSession || qrChallenge || isCreatingQr || qrErrorMessage) return;
-    void createQrChallenge();
-  }, [authMode, createQrChallenge, isCheckingSession, isCreatingQr, qrChallenge, qrErrorMessage]);
+    if (authMode !== "qr" || !qrSessionStartedAtMs || isExchangingQr) return;
+
+    const elapsedMs = Date.now() - qrSessionStartedAtMs;
+    const remainingMs = QR_SESSION_TIMEOUT_MS - elapsedMs;
+    if (remainingMs <= 0) {
+      qrDebug("challenge.session.timeout", { elapsedMs });
+      switchToPasswordMode(GENERIC_QR_TIMEOUT_MESSAGE);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      qrDebug("challenge.session.timeout", { elapsedMs: Date.now() - qrSessionStartedAtMs });
+      switchToPasswordMode(GENERIC_QR_TIMEOUT_MESSAGE);
+    }, remainingMs);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [authMode, isExchangingQr, qrSessionStartedAtMs, switchToPasswordMode]);
 
   useEffect(() => {
     if (authMode !== "qr" || !qrChallenge || isCreatingQr || isExchangingQr) return;
@@ -556,34 +590,22 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
         if (body.challenge.status === "rejected") {
           shouldScheduleNext = false;
-          setQrErrorMessage(body.challenge.rejectedReason ?? "QR login was rejected in your app.");
-          setQrStatusMessage("Generating a new QR challenge...");
-          setQrChallenge(null);
-          setQrImageUrl(null);
-          void createQrChallenge();
+          switchToPasswordMode(body.challenge.rejectedReason ?? "QR login was rejected in your app.");
           return;
         }
 
         if (body.challenge.status === "expired") {
           shouldScheduleNext = false;
-          setQrErrorMessage(null);
-          setQrStatusMessage("QR challenge expired. Generating a new one...");
-          setQrChallenge(null);
-          setQrImageUrl(null);
           qrDebug("challenge.poll.expired", {
             challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
           });
-          void createQrChallenge();
+          switchToPasswordMode(GENERIC_QR_TIMEOUT_MESSAGE);
           return;
         }
 
         if (body.challenge.status === "consumed") {
           shouldScheduleNext = false;
-          setQrErrorMessage(null);
-          setQrStatusMessage("QR challenge was already used. Generating a new one...");
-          setQrChallenge(null);
-          setQrImageUrl(null);
-          void createQrChallenge();
+          switchToPasswordMode("QR challenge was already used. Please start QR login again.");
           return;
         }
       } catch (error) {
@@ -634,7 +656,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
       });
     };
-  }, [authMode, completeQrLogin, createQrChallenge, isCreatingQr, isExchangingQr, qrChallenge, syncServerClock]);
+  }, [authMode, completeQrLogin, isCreatingQr, isExchangingQr, qrChallenge, switchToPasswordMode, syncServerClock]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -728,9 +750,8 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
                     className={`auth-mode-btn ${authMode === "password" ? "is-active" : ""}`}
                     disabled={isSubmitting || isNavigating || isExchangingQr}
                     onClick={() => {
-                      setAuthMode("password");
-                      setQrErrorMessage(null);
-                      setQrStatusMessage(null);
+                      switchToPasswordMode(null);
+                      setErrorMessage(null);
                     }}
                     role="tab"
                     type="button"
@@ -742,8 +763,15 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
                     className={`auth-mode-btn ${authMode === "qr" ? "is-active" : ""}`}
                     disabled={!QR_FEATURE_ENABLED || isSubmitting || isNavigating || isExchangingQr}
                     onClick={() => {
+                      if (authMode === "qr" && (isCreatingQr || !!qrChallenge)) return;
+                      resetQrFlowState();
                       setAuthMode("qr");
                       setErrorMessage(null);
+                      setQrErrorMessage(null);
+                      setQrStatusMessage(null);
+                      setQrRefreshCooldownSeconds(0);
+                      setQrSessionStartedAtMs(Date.now());
+                      void createQrChallenge();
                     }}
                     role="tab"
                     type="button"
@@ -831,6 +859,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
                           qrDebug("challenge.refresh.click", {
                             cooldownSeconds: qrRefreshCooldownSeconds,
                           });
+                          setErrorMessage(null);
                           setQrErrorMessage(null);
                           setQrStatusMessage(null);
                           setQrChallenge(null);
