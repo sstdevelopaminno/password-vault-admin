@@ -12,7 +12,13 @@ export async function createServerSupabase() {
       },
       setAll(items) {
         items.forEach(({ name, value, options }) => {
-          store.set(name, value, options);
+          try {
+            // In Server Components, Next.js blocks cookie writes.
+            // Route Handlers / Server Actions can still set cookies normally.
+            store.set(name, value, options);
+          } catch {
+            // Ignore write attempts in read-only contexts.
+          }
         });
       },
     },

@@ -24,11 +24,21 @@ type ChallengeRow = {
   consumed_at: string | null;
 };
 
+async function measureMs<T>(bucket: Record<string, number>, key: string, fn: () => PromiseLike<T> | T): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await fn();
+  } finally {
+    bucket[key] = Math.max(0, Date.now() - startedAt);
+  }
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ challengeId: string }> },
 ) {
   const ctx = createApiRequestContext(request, ROUTE);
+  const timingsMs: Record<string, number> = {};
 
   try {
     if (!isAdminQrLoginEnabled()) {
@@ -44,36 +54,40 @@ export async function GET(
 
     const admin = createAdminClient();
     const tokenHash = hashQrSecret(parsed.token);
-    const { data: challenge, error } = await admin
-      .from("admin_qr_login_challenges")
-      .select("id,nonce,status,expires_at,approved_at,approved_by_email,rejected_reason,consumed_at")
-      .eq("id", challengeId)
-      .eq("challenge_token_hash", tokenHash)
-      .maybeSingle<ChallengeRow>();
+    const { data: challenge, error } = await measureMs(timingsMs, "db.challenge.selectMs", () =>
+      admin
+        .from("admin_qr_login_challenges")
+        .select("id,nonce,status,expires_at,approved_at,approved_by_email,rejected_reason,consumed_at")
+        .eq("id", challengeId)
+        .eq("challenge_token_hash", tokenHash)
+        .maybeSingle<ChallengeRow>(),
+    );
 
     if (error) {
       throw error;
     }
 
     if (!challenge || challenge.nonce !== parsed.nonce) {
-      logApiSuccess(ctx, 404, { reason: "challenge_not_found" });
+      logApiSuccess(ctx, 404, { reason: "challenge_not_found", timingsMs });
       return jsonError(ctx, "Challenge not found", { status: 404 });
     }
 
     let status = challenge.status;
     if (status === "pending" && Date.parse(challenge.expires_at) <= Date.now()) {
-      const { error: expireError } = await admin
-        .from("admin_qr_login_challenges")
-        .update({ status: "expired", updated_at: new Date().toISOString() })
-        .eq("id", challenge.id)
-        .eq("status", "pending");
+      const { error: expireError } = await measureMs(timingsMs, "db.challenge.expireMs", () =>
+        admin
+          .from("admin_qr_login_challenges")
+          .update({ status: "expired", updated_at: new Date().toISOString() })
+          .eq("id", challenge.id)
+          .eq("status", "pending"),
+      );
 
       if (!expireError) {
         status = "expired";
       }
     }
 
-    logApiSuccess(ctx, 200, { challengeId: challenge.id, status });
+    logApiSuccess(ctx, 200, { challengeId: challenge.id, status, timingsMs });
     const serverNow = new Date().toISOString();
     return jsonData(
       ctx,
@@ -96,7 +110,8 @@ export async function GET(
       return jsonError(ctx, "Invalid challenge credentials", { status: 400 });
     }
 
-    logApiError(ctx, 500, error, { route: ROUTE });
+    logApiError(ctx, 500, error, { route: ROUTE, timingsMs });
     return jsonError(ctx, "Unable to resolve QR challenge", { status: 500 });
   }
 }
+

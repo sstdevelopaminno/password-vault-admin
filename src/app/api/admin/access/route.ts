@@ -10,11 +10,21 @@ export async function GET(request: Request) {
   const guard = await requireAdminApiContext(ctx, request);
 
   if (!guard.ok) {
-    logApiSuccess(ctx, guard.response.status, { guard: "blocked" });
+    logApiSuccess(ctx, guard.response.status, {
+      guard: "blocked",
+      authSource: guard.profiling.authSource,
+      guardDurationMs: guard.profiling.guardDurationMs,
+      timingsMs: guard.profiling.timingsMs,
+    });
     return guard.response;
   }
 
-  logApiSuccess(ctx, 200, { guard: "ok" });
+  logApiSuccess(ctx, 200, {
+    guard: "ok",
+    authSource: guard.profiling.authSource,
+    guardDurationMs: guard.profiling.guardDurationMs,
+    timingsMs: guard.profiling.timingsMs,
+  });
   return jsonData(
     ctx,
     {

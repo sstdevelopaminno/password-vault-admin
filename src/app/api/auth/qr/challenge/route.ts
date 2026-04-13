@@ -16,18 +16,59 @@ import { writeAdminAuditEvent } from "@/lib/audit";
 const ROUTE = "/api/auth/qr/challenge";
 const MAX_PENDING_PER_IP_PER_MINUTE = 8;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_BLOCK_CACHE_MAX = 2000;
+const RATE_LIMIT_DB_CHECK_START_AT = 4;
+
+type RateLimitBlockState = {
+  blockedUntilMs: number;
+};
+
+type LocalRateLimitWindowState = {
+  timestampsMs: number[];
+};
+
+const blockedIpCache = new Map<string, RateLimitBlockState>();
+const localRateWindowByIp = new Map<string, LocalRateLimitWindowState>();
+
+function pruneWindowTimestamps(nowMs: number, timestampsMs: number[]) {
+  const minAllowed = nowMs - RATE_LIMIT_WINDOW_MS;
+  return timestampsMs.filter((value) => value > minAllowed);
+}
+
+function cleanupRateLimitCaches(nowMs: number) {
+  if (blockedIpCache.size > RATE_LIMIT_BLOCK_CACHE_MAX) {
+    for (const [ip, value] of blockedIpCache.entries()) {
+      if (value.blockedUntilMs <= nowMs) {
+        blockedIpCache.delete(ip);
+      }
+      if (blockedIpCache.size <= RATE_LIMIT_BLOCK_CACHE_MAX) break;
+    }
+  }
+
+  if (localRateWindowByIp.size > RATE_LIMIT_BLOCK_CACHE_MAX) {
+    for (const [ip, value] of localRateWindowByIp.entries()) {
+      const pruned = pruneWindowTimestamps(nowMs, value.timestampsMs);
+      if (pruned.length === 0) {
+        localRateWindowByIp.delete(ip);
+      } else {
+        value.timestampsMs = pruned;
+      }
+      if (localRateWindowByIp.size <= RATE_LIMIT_BLOCK_CACHE_MAX) break;
+    }
+  }
+}
 
 const requestSchema = z.object({
   deviceLabel: z.string().trim().min(1).max(120).optional(),
 });
 
-async function expirePendingChallenges() {
-  const admin = createAdminClient();
-  await admin
-    .from("admin_qr_login_challenges")
-    .update({ status: "expired", updated_at: new Date().toISOString() })
-    .eq("status", "pending")
-    .lt("expires_at", new Date().toISOString());
+async function measureMs<T>(bucket: Record<string, number>, key: string, fn: () => PromiseLike<T> | T): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await fn();
+  } finally {
+    bucket[key] = Math.max(0, Date.now() - startedAt);
+  }
 }
 
 async function parseBody(request: Request) {
@@ -41,6 +82,7 @@ async function parseBody(request: Request) {
 
 export async function POST(request: Request) {
   const ctx = createApiRequestContext(request, ROUTE);
+  const timingsMs: Record<string, number> = {};
 
   try {
     if (!isAdminQrLoginEnabled()) {
@@ -51,46 +93,22 @@ export async function POST(request: Request) {
     const payload = await parseBody(request);
     const admin = createAdminClient();
 
-    await expirePendingChallenges();
-
     const requestIp = getClientIp(request);
+    const nowMs = Date.now();
+    let localWindow: LocalRateLimitWindowState | null = null;
     if (requestIp) {
-      const nowMs = Date.now();
-      const sinceIso = new Date(nowMs - RATE_LIMIT_WINDOW_MS).toISOString();
-      const { count, error } = await admin
-        .from("admin_qr_login_challenges")
-        .select("id", { head: true, count: "exact" })
-        .eq("status", "pending")
-        .eq("requested_by_ip", requestIp)
-        .gte("created_at", sinceIso);
+      localWindow = localRateWindowByIp.get(requestIp) ?? { timestampsMs: [] };
+      localWindow.timestampsMs = pruneWindowTimestamps(nowMs, localWindow.timestampsMs);
 
-      if (error) {
-        throw error;
-      }
-
-      if ((count ?? 0) >= MAX_PENDING_PER_IP_PER_MINUTE) {
-        const { data: oldestPending, error: oldestError } = await admin
-          .from("admin_qr_login_challenges")
-          .select("created_at")
-          .eq("status", "pending")
-          .eq("requested_by_ip", requestIp)
-          .gte("created_at", sinceIso)
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle<{ created_at: string }>();
-
-        if (oldestError) {
-          throw oldestError;
-        }
-
-        const oldestCreatedAtMs = oldestPending ? Date.parse(oldestPending.created_at) : nowMs;
-        const elapsedMs = Math.max(0, nowMs - oldestCreatedAtMs);
-        const retryAfterSeconds = Math.max(1, Math.ceil((RATE_LIMIT_WINDOW_MS - elapsedMs) / 1000));
-
+      if (localWindow.timestampsMs.length >= MAX_PENDING_PER_IP_PER_MINUTE) {
+        const oldestMs = localWindow.timestampsMs[0] ?? nowMs;
+        const retryAfterSeconds = Math.max(1, Math.ceil((oldestMs + RATE_LIMIT_WINDOW_MS - nowMs) / 1000));
+        blockedIpCache.set(requestIp, { blockedUntilMs: nowMs + retryAfterSeconds * 1000 });
         logApiSuccess(ctx, 429, {
-          reason: "rate_limited",
+          reason: "rate_limited_local_window",
           requestIp,
           retryAfterSeconds,
+          timingsMs,
         });
         return jsonError(ctx, "Too many QR requests. Please wait and try again.", {
           status: 429,
@@ -101,6 +119,30 @@ export async function POST(request: Request) {
           details: { retryAfterSeconds },
         });
       }
+
+      const cached = blockedIpCache.get(requestIp);
+      if (cached && cached.blockedUntilMs > nowMs) {
+        const retryAfterSeconds = Math.max(1, Math.ceil((cached.blockedUntilMs - nowMs) / 1000));
+        logApiSuccess(ctx, 429, {
+          reason: "rate_limited_cache",
+          requestIp,
+          retryAfterSeconds,
+          timingsMs,
+        });
+        return jsonError(ctx, "Too many QR requests. Please wait and try again.", {
+          status: 429,
+          headers: {
+            "cache-control": "no-store",
+            "retry-after": String(retryAfterSeconds),
+          },
+          details: { retryAfterSeconds },
+        });
+      }
+
+      // Avoid DB rate-check roundtrip for the first few requests in the local window.
+      if (localWindow.timestampsMs.length < RATE_LIMIT_DB_CHECK_START_AT) {
+        timingsMs["db.rateLimit.pendingByIpMs"] = 0;
+      }
     }
 
     const challengeToken = generateQrSecret(32);
@@ -108,31 +150,76 @@ export async function POST(request: Request) {
     const expiresAt = new Date(Date.now() + env.ADMIN_QR_LOGIN_TTL_SECONDS * 1000).toISOString();
     const origin = new URL(request.url).origin;
 
-    const { data: inserted, error: insertError } = await admin
-      .from("admin_qr_login_challenges")
-      .insert({
-        challenge_token_hash: hashQrSecret(challengeToken),
-        nonce,
-        status: "pending",
-        requested_by_ip: requestIp,
-        requested_user_agent: getClientUserAgent(request),
-        requested_device_label: payload.deviceLabel ?? null,
-        expires_at: expiresAt,
-        metadata_json: {
-          route: ROUTE,
-          source: "admin_login_page",
-        },
-      })
-      .select("id,nonce,status,expires_at")
-      .single<{
-        id: string;
-        nonce: string;
-        status: string;
-        expires_at: string;
-      }>();
+    const { data: created, error: createError } = await measureMs(timingsMs, "db.challenge.createViaRpcMs", () =>
+      admin
+        .rpc("create_admin_qr_login_challenge", {
+          p_challenge_token_hash: hashQrSecret(challengeToken),
+          p_nonce: nonce,
+          p_requested_by_ip: requestIp,
+          p_requested_user_agent: getClientUserAgent(request),
+          p_requested_device_label: payload.deviceLabel ?? null,
+          p_expires_at: expiresAt,
+          p_metadata_json: {
+            route: ROUTE,
+            source: "admin_login_page",
+          },
+          p_max_pending: MAX_PENDING_PER_IP_PER_MINUTE,
+          p_window_seconds: Math.floor(RATE_LIMIT_WINDOW_MS / 1000),
+        })
+        .single<{
+          challenge_id: string | null;
+          challenge_nonce: string | null;
+          challenge_status: string | null;
+          challenge_expires_at: string | null;
+          rate_limited: boolean;
+          retry_after_seconds: number | null;
+        }>(),
+    );
 
-    if (insertError || !inserted) {
-      throw insertError ?? new Error("Unable to create challenge");
+    if (createError || !created) {
+      throw createError ?? new Error("Unable to create challenge");
+    }
+
+    if (created.rate_limited) {
+      const retryAfterSeconds = Math.max(1, created.retry_after_seconds ?? 1);
+      if (requestIp) {
+        blockedIpCache.set(requestIp, {
+          blockedUntilMs: nowMs + retryAfterSeconds * 1000,
+        });
+      }
+      cleanupRateLimitCaches(nowMs);
+
+      logApiSuccess(ctx, 429, {
+        reason: "rate_limited_db",
+        requestIp,
+        retryAfterSeconds,
+        timingsMs,
+      });
+      return jsonError(ctx, "Too many QR requests. Please wait and try again.", {
+        status: 429,
+        headers: {
+          "cache-control": "no-store",
+          "retry-after": String(retryAfterSeconds),
+        },
+        details: { retryAfterSeconds },
+      });
+    }
+
+    if (!created.challenge_id || !created.challenge_nonce || !created.challenge_status || !created.challenge_expires_at) {
+      throw new Error("Invalid challenge row from create_admin_qr_login_challenge");
+    }
+
+    const inserted = {
+      id: created.challenge_id,
+      nonce: created.challenge_nonce,
+      status: created.challenge_status,
+      expires_at: created.challenge_expires_at,
+    };
+
+    if (requestIp && localWindow) {
+      localWindow.timestampsMs.push(nowMs);
+      localRateWindowByIp.set(requestIp, localWindow);
+      cleanupRateLimitCaches(nowMs);
     }
 
     const qr = buildQrPayload({
@@ -152,7 +239,7 @@ export async function POST(request: Request) {
       },
     });
 
-    logApiSuccess(ctx, 201, { challengeId: inserted.id });
+    logApiSuccess(ctx, 201, { challengeId: inserted.id, timingsMs });
     const serverNow = new Date().toISOString();
     return jsonData(
       ctx,
@@ -179,7 +266,7 @@ export async function POST(request: Request) {
       return jsonError(ctx, "Invalid request payload", { status: 400 });
     }
 
-    logApiError(ctx, 500, error, { route: ROUTE });
+    logApiError(ctx, 500, error, { route: ROUTE, timingsMs });
     return jsonError(ctx, "Unable to create QR login challenge", { status: 500 });
   }
 }

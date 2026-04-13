@@ -20,8 +20,6 @@ const QR_SESSION_TIMEOUT_SECONDS = Number.isFinite(QR_SESSION_TIMEOUT_SECONDS_RA
   ? Math.min(600, Math.max(30, Math.floor(QR_SESSION_TIMEOUT_SECONDS_RAW)))
   : 120;
 const QR_DEBUG_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_DEBUG === "true";
-const ACCESS_CHECK_MAX_RETRIES = 8;
-const ACCESS_CHECK_RETRY_BASE_MS = 300;
 const QR_SESSION_TIMEOUT_MS = QR_SESSION_TIMEOUT_SECONDS * 1000;
 
 function qrDebug(event: string, details?: Record<string, unknown>) {
@@ -101,12 +99,14 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const isCompletingRef = useRef(false);
   const isCreatingQrRef = useRef(false);
+  const qrLoginResolvedRef = useRef(false);
   const qrCreateRequestIdRef = useRef(0);
   const activeQrKeyRef = useRef<string | null>(null);
   const pollingAbortRef = useRef<AbortController | null>(null);
   const lastPolledStatusRef = useRef<string | null>(null);
 
   const resetQrFlowState = useCallback(() => {
+    isCompletingRef.current = false;
     activeQrKeyRef.current = null;
     pollingAbortRef.current?.abort();
     pollingAbortRef.current = null;
@@ -120,6 +120,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
   const switchToPasswordMode = useCallback(
     (message?: string | null) => {
+      qrLoginResolvedRef.current = false;
       resetQrFlowState();
       setQrStatusMessage(null);
       setQrErrorMessage(null);
@@ -134,51 +135,38 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   );
 
   const checkAdminAccess = useCallback(async (accessToken?: string | null): Promise<AccessCheckResult> => {
-    let attempts = 0;
-    let lastResult: AccessCheckResult = {
-      ok: false,
-      status: 0,
-      error: null,
-      requestId: null,
+    const response = await fetch("/api/admin/access", {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined,
+    });
+
+    const body = (await response.json().catch(() => ({}))) as AdminAccessCheckResponse;
+    return {
+      ok: response.ok && body.ok === true,
+      status: response.status,
+      error: body.error ?? null,
+      requestId: body.requestId ?? null,
     };
-
-    while (attempts < ACCESS_CHECK_MAX_RETRIES) {
-      attempts += 1;
-      const response = await fetch("/api/admin/access", {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined,
-      });
-
-      const body = (await response.json().catch(() => ({}))) as AdminAccessCheckResponse;
-      const current: AccessCheckResult = {
-        ok: response.ok && body.ok === true,
-        status: response.status,
-        error: body.error ?? null,
-        requestId: body.requestId ?? null,
-      };
-
-      if (current.ok) {
-        return current;
-      }
-
-      lastResult = current;
-      if (response.status !== 401 || attempts >= ACCESS_CHECK_MAX_RETRIES) {
-        return current;
-      }
-
-      await new Promise((resolve) => window.setTimeout(resolve, attempts * ACCESS_CHECK_RETRY_BASE_MS));
-    }
-
-    return lastResult;
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function checkCurrentSession() {
-      const result = await checkAdminAccess().catch(
+      const supabase = createBrowserSupabase();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+      if (cancelled) return;
+
+      if (!session?.access_token) {
+        setIsCheckingSession(false);
+        return;
+      }
+
+      const result = await checkAdminAccess(session.access_token).catch(
         () =>
           ({
             ok: false,
@@ -192,9 +180,12 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
       if (result.ok) {
         startTransition(() => {
           router.replace("/");
-          router.refresh();
         });
         return;
+      }
+
+      if (result.status === 401 || result.status === 403) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
       }
 
       setIsCheckingSession(false);
@@ -287,6 +278,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
     const requestId = ++qrCreateRequestIdRef.current;
     isCreatingQrRef.current = true;
+    qrLoginResolvedRef.current = false;
     qrDebug("challenge.create.start", { requestSerial: requestId });
 
     setErrorMessage(null);
@@ -382,7 +374,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
   const completeQrLogin = useCallback(
     async (challenge: QrChallenge) => {
-      if (isCompletingRef.current) return;
+      if (isCompletingRef.current || qrLoginResolvedRef.current) return;
       isCompletingRef.current = true;
       qrDebug("challenge.exchange.start", {
         challengeRef: challenge.id.slice(0, 8).toUpperCase(),
@@ -464,9 +456,13 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         qrDebug("challenge.exchange.success", {
           challengeRef: challenge.id.slice(0, 8).toUpperCase(),
         });
+        qrLoginResolvedRef.current = true;
+        resetQrFlowState();
+        setQrSessionStartedAtMs(null);
+        setQrErrorMessage(null);
+        setQrStatusMessage("Login successful. Redirecting...");
         startTransition(() => {
           router.replace("/");
-          router.refresh();
         });
       } catch (error) {
         if (error instanceof Error) {
@@ -487,11 +483,11 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         isCompletingRef.current = false;
       }
     },
-    [checkAdminAccess, router, switchToPasswordMode],
+    [checkAdminAccess, resetQrFlowState, router, switchToPasswordMode],
   );
 
   useEffect(() => {
-    if (authMode !== "qr" || !qrSessionStartedAtMs || isExchangingQr) return;
+    if (authMode !== "qr" || !qrSessionStartedAtMs || isExchangingQr || qrLoginResolvedRef.current) return;
 
     const elapsedMs = Date.now() - qrSessionStartedAtMs;
     const remainingMs = QR_SESSION_TIMEOUT_MS - elapsedMs;
@@ -512,7 +508,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
   }, [authMode, isExchangingQr, qrSessionStartedAtMs, switchToPasswordMode]);
 
   useEffect(() => {
-    if (authMode !== "qr" || !qrChallenge || isCreatingQr || isExchangingQr) return;
+    if (authMode !== "qr" || !qrChallenge || isCreatingQr || isExchangingQr || qrLoginResolvedRef.current) return;
 
     const challengeSnapshot = qrChallenge;
     const challengeKey = `${challengeSnapshot.id}:${challengeSnapshot.nonce}`;
@@ -529,7 +525,9 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
     });
 
     const poll = async () => {
-      if (disposed || isCompletingRef.current || activeQrKeyRef.current !== challengeKey) return;
+      if (disposed || isCompletingRef.current || qrLoginResolvedRef.current || activeQrKeyRef.current !== challengeKey) {
+        return;
+      }
 
       const pollController = new AbortController();
       pollingAbortRef.current = pollController;
@@ -609,6 +607,9 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
         if (body.challenge.status === "consumed") {
           shouldScheduleNext = false;
+          if (qrLoginResolvedRef.current || isNavigating) {
+            return;
+          }
           switchToPasswordMode("QR challenge was already used. Please start QR login again.");
           return;
         }
@@ -660,7 +661,16 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
         challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
       });
     };
-  }, [authMode, completeQrLogin, isCreatingQr, isExchangingQr, qrChallenge, switchToPasswordMode, syncServerClock]);
+  }, [
+    authMode,
+    completeQrLogin,
+    isCreatingQr,
+    isExchangingQr,
+    isNavigating,
+    qrChallenge,
+    switchToPasswordMode,
+    syncServerClock,
+  ]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -700,7 +710,6 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
       startTransition(() => {
         router.replace("/");
-        router.refresh();
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -863,11 +872,11 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
                           qrDebug("challenge.refresh.click", {
                             cooldownSeconds: qrRefreshCooldownSeconds,
                           });
+                          resetQrFlowState();
                           setErrorMessage(null);
                           setQrErrorMessage(null);
                           setQrStatusMessage(null);
-                          setQrChallenge(null);
-                          setQrImageUrl(null);
+                          setQrSessionStartedAtMs(Date.now());
                           void createQrChallenge();
                         }}
                         type="button"

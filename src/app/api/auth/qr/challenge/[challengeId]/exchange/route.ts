@@ -30,14 +30,25 @@ type ProfileRow = {
   status: string;
 };
 
+async function measureMs<T>(bucket: Record<string, number>, key: string, fn: () => PromiseLike<T> | T): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await fn();
+  } finally {
+    bucket[key] = Math.max(0, Date.now() - startedAt);
+  }
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ challengeId: string }> },
 ) {
   const ctx = createApiRequestContext(request, ROUTE);
+  const timingsMs: Record<string, number> = {};
 
   try {
     if (!isAdminQrLoginEnabled()) {
+      logApiSuccess(ctx, 404, { reason: "feature_disabled", timingsMs });
       return jsonError(ctx, "QR login is disabled", { status: 404 });
     }
 
@@ -46,82 +57,99 @@ export async function POST(
     const admin = createAdminClient();
     const nowIso = new Date().toISOString();
 
-    const { data: challenge, error } = await admin
-      .from("admin_qr_login_challenges")
-      .select("id,nonce,status,expires_at,approved_by_user_id,consumed_at")
-      .eq("id", challengeId)
-      .eq("challenge_token_hash", hashQrSecret(payload.token))
-      .maybeSingle<ChallengeRow>();
+    const { data: challenge, error } = await measureMs(timingsMs, "db.challenge.selectMs", () =>
+      admin
+        .from("admin_qr_login_challenges")
+        .select("id,nonce,status,expires_at,approved_by_user_id,consumed_at")
+        .eq("id", challengeId)
+        .eq("challenge_token_hash", hashQrSecret(payload.token))
+        .maybeSingle<ChallengeRow>(),
+    );
 
     if (error) {
       throw error;
     }
 
     if (!challenge || challenge.nonce !== payload.nonce) {
+      logApiSuccess(ctx, 404, { reason: "challenge_not_found", timingsMs });
       return jsonError(ctx, "Challenge not found", { status: 404 });
     }
 
     if (challenge.status === "pending" && Date.parse(challenge.expires_at) <= Date.now()) {
-      await admin
-        .from("admin_qr_login_challenges")
-        .update({ status: "expired", updated_at: nowIso })
-        .eq("id", challenge.id)
-        .eq("status", "pending");
+      await measureMs(timingsMs, "db.challenge.expireMs", () =>
+        admin
+          .from("admin_qr_login_challenges")
+          .update({ status: "expired", updated_at: nowIso })
+          .eq("id", challenge.id)
+          .eq("status", "pending"),
+      );
+      logApiSuccess(ctx, 409, { reason: "challenge_expired", challengeId: challenge.id, timingsMs });
       return jsonError(ctx, "Challenge expired", { status: 409 });
     }
 
     if (challenge.status !== "approved" || !challenge.approved_by_user_id) {
+      logApiSuccess(ctx, 409, { reason: "challenge_not_approved", challengeId: challenge.id, timingsMs });
       return jsonError(ctx, "Challenge is not approved yet", { status: 409 });
     }
 
     if (challenge.consumed_at) {
+      logApiSuccess(ctx, 409, { reason: "challenge_already_consumed", challengeId: challenge.id, timingsMs });
       return jsonError(ctx, "Challenge already consumed", { status: 409 });
     }
 
-    const { data: approver, error: approverError } = await admin
-      .from("profiles")
-      .select("id,email,role,status")
-      .eq("id", challenge.approved_by_user_id)
-      .single<ProfileRow>();
+    const { data: approver, error: approverError } = await measureMs(timingsMs, "db.profiles.approverByIdMs", () =>
+      admin
+        .from("profiles")
+        .select("id,email,role,status")
+        .eq("id", challenge.approved_by_user_id)
+        .single<ProfileRow>(),
+    );
 
     if (approverError || !approver) {
+      logApiSuccess(ctx, 404, { reason: "approver_profile_not_found", challengeId: challenge.id, timingsMs });
       return jsonError(ctx, "Approver profile not found", { status: 404 });
     }
 
     const allowedRoles = getAdminAllowedRoles();
     if (approver.status !== "active" || !allowedRoles.includes(approver.role)) {
+      logApiSuccess(ctx, 403, { reason: "approver_forbidden", challengeId: challenge.id, timingsMs });
       return jsonError(ctx, "Approver has no admin access", { status: 403 });
     }
 
-    const { data: magicLink, error: linkError } = await admin.auth.admin.generateLink({
-      type: "magiclink",
-      email: approver.email,
-    });
+    const { data: magicLink, error: linkError } = await measureMs(timingsMs, "auth.generateMagicLinkMs", () =>
+      admin.auth.admin.generateLink({
+        type: "magiclink",
+        email: approver.email,
+      }),
+    );
 
     if (linkError || !magicLink?.properties?.hashed_token) {
       throw linkError ?? new Error("Unable to create one-time sign-in token");
     }
 
-    const { data: consumedChallenge, error: consumeError } = await admin
-      .from("admin_qr_login_challenges")
-      .update({
-        status: "consumed",
-        consumed_at: nowIso,
-        consumed_by_ip: getClientIp(request),
-        consumed_user_agent: getClientUserAgent(request),
-        updated_at: nowIso,
-      })
-      .eq("id", challenge.id)
-      .eq("status", "approved")
-      .is("consumed_at", null)
-      .select("id")
-      .maybeSingle();
+    const { data: consumedChallenge, error: consumeError } = await measureMs(timingsMs, "db.challenge.consumeMs", () =>
+      admin
+        .from("admin_qr_login_challenges")
+        .update({
+          status: "consumed",
+          consumed_at: nowIso,
+          consumed_by_ip: getClientIp(request),
+          consumed_user_agent: getClientUserAgent(request),
+          updated_at: nowIso,
+        })
+        .eq("id", challenge.id)
+        .eq("status", "approved")
+        .is("consumed_at", null)
+        .select("id")
+        .maybeSingle(),
+    );
 
     if (consumeError) {
       throw consumeError;
     }
 
     if (!consumedChallenge) {
+      logApiSuccess(ctx, 409, { reason: "challenge_already_consumed", challengeId: challenge.id, timingsMs });
       return jsonError(ctx, "Challenge already consumed", { status: 409 });
     }
 
@@ -131,7 +159,7 @@ export async function POST(
       metadata: { challengeId: challenge.id },
     });
 
-    logApiSuccess(ctx, 200, { challengeId: challenge.id, userId: approver.id });
+    logApiSuccess(ctx, 200, { challengeId: challenge.id, userId: approver.id, timingsMs });
     return jsonData(
       ctx,
       {
@@ -143,11 +171,13 @@ export async function POST(
       { headers: { "cache-control": "no-store" } },
     );
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError || error instanceof SyntaxError) {
+      logApiSuccess(ctx, 400, { reason: "invalid_payload", timingsMs });
       return jsonError(ctx, "Invalid request payload", { status: 400 });
     }
 
-    logApiError(ctx, 500, error, { route: ROUTE });
+    logApiError(ctx, 500, error, { route: ROUTE, timingsMs });
     return jsonError(ctx, "Unable to exchange QR login challenge", { status: 500 });
   }
 }
+
