@@ -15,6 +15,8 @@ const GENERIC_ACCESS_CHECK_ERROR = "Unable to verify admin access right now. Ple
 const GENERIC_QR_TIMEOUT_MESSAGE = "QR login timed out. Please start QR login again.";
 const QR_FEATURE_ENABLED = process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_ENABLED !== "false";
 const QR_POLL_MS = Number(process.env.NEXT_PUBLIC_ADMIN_QR_LOGIN_POLL_MS ?? "2000");
+const QR_POLL_MAX_MS = 6000;
+const QR_POLL_HIDDEN_MIN_MS = 5000;
 const QR_SESSION_TIMEOUT_SECONDS_RAW = Number(process.env.NEXT_PUBLIC_ADMIN_QR_SESSION_TIMEOUT_SECONDS ?? "120");
 const QR_SESSION_TIMEOUT_SECONDS = Number.isFinite(QR_SESSION_TIMEOUT_SECONDS_RAW)
   ? Math.min(600, Math.max(30, Math.floor(QR_SESSION_TIMEOUT_SECONDS_RAW)))
@@ -519,6 +521,19 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
       Number.isFinite(challengeSnapshot.pollIntervalMs) && challengeSnapshot.pollIntervalMs >= 500
         ? challengeSnapshot.pollIntervalMs
         : QR_POLL_MS;
+    let pendingPollStreak = 0;
+
+    const resolveNextPollDelayMs = () => {
+      const backoffTier = Math.min(3, Math.floor(pendingPollStreak / 4));
+      let delay = pollMs * (1 + backoffTier);
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        delay = Math.max(delay, QR_POLL_HIDDEN_MIN_MS);
+      }
+      delay = Math.min(QR_POLL_MAX_MS, delay);
+      const jitterMs = Math.min(250, Math.floor(delay * 0.1));
+      return delay + Math.floor(Math.random() * (jitterMs + 1));
+    };
+
     qrDebug("challenge.poll.start", {
       challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
       pollMs,
@@ -573,6 +588,7 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
 
         if (lastPolledStatusRef.current !== body.challenge.status) {
           lastPolledStatusRef.current = body.challenge.status;
+          pendingPollStreak = 0;
           qrDebug("challenge.poll.status", {
             challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
             status: body.challenge.status,
@@ -613,32 +629,42 @@ export function AdminLoginForm({ initialNotice = null }: AdminLoginFormProps) {
           switchToPasswordMode("QR challenge was already used. Please start QR login again.");
           return;
         }
+
+        pendingPollStreak += 1;
       } catch (error) {
         if (pollController.signal.aborted) return;
         if (disposed || activeQrKeyRef.current !== challengeKey) return;
 
         if (error instanceof Error) {
           setQrErrorMessage(error.message || GENERIC_QR_ERROR);
+          setQrStatusMessage("Connection unstable. Retrying QR status check...");
           qrDebug("challenge.poll.error", {
             challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
             message: error.message || GENERIC_QR_ERROR,
           });
         } else {
           setQrErrorMessage(GENERIC_QR_ERROR);
+          setQrStatusMessage("Connection unstable. Retrying QR status check...");
           qrDebug("challenge.poll.error", {
             challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
             message: GENERIC_QR_ERROR,
           });
         }
-        setQrStatusMessage(null);
-        shouldScheduleNext = false;
+        pendingPollStreak = Math.max(pendingPollStreak, 3);
+        shouldScheduleNext = true;
       } finally {
         if (pollingAbortRef.current === pollController) {
           pollingAbortRef.current = null;
         }
 
         if (shouldScheduleNext && !disposed && !isCompletingRef.current && activeQrKeyRef.current === challengeKey) {
-          timer = window.setTimeout(() => void poll(), pollMs);
+          const nextDelayMs = resolveNextPollDelayMs();
+          qrDebug("challenge.poll.schedule", {
+            challengeRef: challengeSnapshot.id.slice(0, 8).toUpperCase(),
+            pendingPollStreak,
+            nextDelayMs,
+          });
+          timer = window.setTimeout(() => void poll(), nextDelayMs);
         }
       }
     };
