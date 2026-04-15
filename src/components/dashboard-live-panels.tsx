@@ -3,6 +3,8 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 
+type UiLocale = "th" | "en";
+
 type StatsPayload = {
   totalUsers: number;
   activeUsers: number;
@@ -47,6 +49,7 @@ type UsersPayload = {
     hasMore: boolean;
     nextCursor: string | null;
   };
+  accountType?: "general" | "backoffice" | "all";
 };
 
 type AuditFilterDraft = {
@@ -59,27 +62,293 @@ type AuditFilterDraft = {
 
 type AuditFilterApplied = AuditFilterDraft;
 
-const ROLE_OPTIONS = ["user", "approver", "admin", "super_admin"] as const;
-const WORKSPACE_TABS = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "audit", label: "Audit Logs" },
-  { id: "users", label: "Users & Approvals" },
-] as const;
-
-type WorkspaceTab = (typeof WORKSPACE_TABS)[number]["id"];
+type WorkspaceTab = "dashboard" | "audit" | "users";
 type AuditSortMode = "created_desc" | "created_asc" | "action_asc" | "action_desc";
 type UserSortMode = "created_desc" | "created_asc" | "name_asc" | "name_desc" | "role_asc" | "status_asc";
+type UserAccountType = "general" | "backoffice";
 
-const HASH_TAB_MAP: Record<string, WorkspaceTab> = {
-  "#workspace-dashboard": "dashboard",
-  "#workspace-audit": "audit",
-  "#workspace-users": "users",
+const ROLE_OPTIONS = ["user", "approver", "admin", "super_admin"] as const;
+const WORKSPACE_TABS: Array<{ id: WorkspaceTab; labelKey: "tabDashboard" | "tabAudit" | "tabUsers" }> = [
+  { id: "dashboard", labelKey: "tabDashboard" },
+  { id: "audit", labelKey: "tabAudit" },
+  { id: "users", labelKey: "tabUsers" },
+];
+
+const HASH_TAB_MAP: Record<string, { tab: WorkspaceTab; accountType?: UserAccountType }> = {
+  "#workspace-dashboard": { tab: "dashboard" },
+  "#workspace-audit": { tab: "audit" },
+  "#workspace-users": { tab: "users" },
+  "#workspace-users-general": { tab: "users", accountType: "general" },
+  "#workspace-users-backoffice": { tab: "users", accountType: "backoffice" },
 };
 
-function formatDateTime(value: string) {
+const UI_TEXT: Record<
+  UiLocale,
+  {
+    workspaceTitle: string;
+    workspaceDesc: string;
+    kpiTotal: string;
+    kpiActive: string;
+    kpiPending: string;
+    tabDashboard: string;
+    tabAudit: string;
+    tabUsers: string;
+    sessionControlTitle: string;
+    sessionControlDesc: string;
+    signOut: string;
+    signingOut: string;
+    liveSnapshotTitle: string;
+    liveSnapshotDesc: string;
+    refreshStats: string;
+    refreshing: string;
+    loadingStats: string;
+    totalUsers: string;
+    activeUsers: string;
+    adminUsers: string;
+    pendingApprovals: string;
+    reviewed24h: string;
+    sensitiveActions24h: string;
+    auditTitle: string;
+    auditDesc: string;
+    newestFirst: string;
+    oldestFirst: string;
+    actionAz: string;
+    actionZa: string;
+    exportCsv: string;
+    exporting: string;
+    previous: string;
+    next: string;
+    searchActionPlaceholder: string;
+    exactActionPlaceholder: string;
+    rows10: string;
+    rows20: string;
+    rows50: string;
+    applyFilters: string;
+    loadingAudit: string;
+    noAudit: string;
+    colNo: string;
+    colAction: string;
+    colActor: string;
+    colTargetUser: string;
+    colCreatedAt: string;
+    colMeta: string;
+    usersTitle: string;
+    usersDesc: string;
+    usersGeneralTab: string;
+    usersBackofficeTab: string;
+    usersScopeGeneralDesc: string;
+    usersScopeBackofficeDesc: string;
+    nameAz: string;
+    nameZa: string;
+    roleAz: string;
+    statusAz: string;
+    searchUsersPlaceholder: string;
+    pendingOnly: string;
+    refreshUsers: string;
+    loadingUsers: string;
+    noUsers: string;
+    colUser: string;
+    colRole: string;
+    colStatus: string;
+    colCreated: string;
+    colActions: string;
+    approve: string;
+    disable: string;
+    delete: string;
+    confirmDelete: string;
+    usersUpdated: string;
+    usersDeleted: string;
+    errLoadStats: string;
+    errLoadAudit: string;
+    errLoadUsers: string;
+    errExportAudit: string;
+    errUpdateUser: string;
+    errDeleteUser: string;
+    chipSearch: string;
+    chipAction: string;
+    chipFrom: string;
+    chipTo: string;
+    chipRows: string;
+  }
+> = {
+  th: {
+    workspaceTitle: "พื้นที่ปฏิบัติการ",
+    workspaceDesc: "สลับงานตามความรับผิดชอบ: ภาพรวม, ตรวจสอบ, และจัดการผู้ใช้งาน",
+    kpiTotal: "ทั้งหมด",
+    kpiActive: "ใช้งานอยู่",
+    kpiPending: "รออนุมัติ",
+    tabDashboard: "แดชบอร์ด",
+    tabAudit: "บันทึกตรวจสอบ",
+    tabUsers: "ผู้ใช้งานและอนุมัติ",
+    sessionControlTitle: "ควบคุมเซสชัน",
+    sessionControlDesc: "อุปกรณ์นี้จะคงสถานะล็อกอินไว้จนกว่าจะออกจากระบบ",
+    signOut: "ออกจากระบบ",
+    signingOut: "กำลังออกจากระบบ...",
+    liveSnapshotTitle: "ภาพรวมระบบแบบเรียลไทม์",
+    liveSnapshotDesc: "สถิติสดและเหตุการณ์ล่าสุดจากระบบหลังบ้าน",
+    refreshStats: "รีเฟรชสถิติ",
+    refreshing: "กำลังรีเฟรช...",
+    loadingStats: "กำลังโหลดสถิติ...",
+    totalUsers: "ผู้ใช้งานทั้งหมด",
+    activeUsers: "ผู้ใช้งานที่ใช้งานอยู่",
+    adminUsers: "ผู้ดูแลระบบ",
+    pendingApprovals: "รออนุมัติ",
+    reviewed24h: "ตรวจสอบใน 24 ชม.",
+    sensitiveActions24h: "เหตุการณ์สำคัญ 24 ชม.",
+    auditTitle: "บันทึก Audit Logs",
+    auditDesc: "กรอง จัดเรียง ส่งออก และแบ่งหน้าเหตุการณ์สำคัญ",
+    newestFirst: "ล่าสุดก่อน",
+    oldestFirst: "เก่าสุดก่อน",
+    actionAz: "เหตุการณ์ A-Z",
+    actionZa: "เหตุการณ์ Z-A",
+    exportCsv: "ส่งออก CSV",
+    exporting: "กำลังส่งออก...",
+    previous: "ก่อนหน้า",
+    next: "ถัดไป",
+    searchActionPlaceholder: "ค้นหาประเภทเหตุการณ์...",
+    exactActionPlaceholder: "ชื่อ action แบบตรงตัว",
+    rows10: "10 แถว",
+    rows20: "20 แถว",
+    rows50: "50 แถว",
+    applyFilters: "ใช้ตัวกรอง",
+    loadingAudit: "กำลังโหลดบันทึก...",
+    noAudit: "ไม่พบข้อมูลบันทึกตรวจสอบ",
+    colNo: "ลำดับ",
+    colAction: "เหตุการณ์",
+    colActor: "ผู้กระทำ",
+    colTargetUser: "ผู้ใช้เป้าหมาย",
+    colCreatedAt: "วันที่เวลา",
+    colMeta: "รายละเอียด",
+    usersTitle: "รายการผู้ใช้งานและอนุมัติ",
+    usersDesc: "รายการที่รออนุมัติในหน้านี้",
+    usersGeneralTab: "ผู้ใช้งานทั่วไป",
+    usersBackofficeTab: "ผู้ใช้งานหลังบ้าน",
+    usersScopeGeneralDesc: "แสดงเฉพาะ role: pending, user",
+    usersScopeBackofficeDesc: "แสดงเฉพาะ role: approver, admin, super_admin",
+    nameAz: "ชื่อ A-Z",
+    nameZa: "ชื่อ Z-A",
+    roleAz: "สิทธิ์ A-Z",
+    statusAz: "สถานะ A-Z",
+    searchUsersPlaceholder: "ค้นหาอีเมล ชื่อ สิทธิ์ สถานะ...",
+    pendingOnly: "แสดงเฉพาะรออนุมัติ",
+    refreshUsers: "รีเฟรชผู้ใช้งาน",
+    loadingUsers: "กำลังโหลดผู้ใช้งาน...",
+    noUsers: "ไม่พบผู้ใช้งานตามเงื่อนไขที่เลือก",
+    colUser: "ผู้ใช้งาน",
+    colRole: "สิทธิ์",
+    colStatus: "สถานะ",
+    colCreated: "วันที่สร้าง",
+    colActions: "จัดการ",
+    approve: "อนุมัติ",
+    disable: "ปิดใช้งาน",
+    delete: "ลบ",
+    confirmDelete: "ยืนยันการลบบัญชีผู้ใช้งานนี้ถาวรหรือไม่?",
+    usersUpdated: "อัปเดตรายการผู้ใช้งานสำเร็จ",
+    usersDeleted: "ลบผู้ใช้งานสำเร็จ",
+    errLoadStats: "ไม่สามารถโหลดสถิติระบบได้",
+    errLoadAudit: "ไม่สามารถโหลดบันทึกตรวจสอบได้",
+    errLoadUsers: "ไม่สามารถโหลดรายการผู้ใช้งานได้",
+    errExportAudit: "ไม่สามารถส่งออกบันทึกตรวจสอบได้",
+    errUpdateUser: "ไม่สามารถอัปเดตผู้ใช้งานได้",
+    errDeleteUser: "ไม่สามารถลบผู้ใช้งานได้",
+    chipSearch: "ค้นหา",
+    chipAction: "เหตุการณ์",
+    chipFrom: "จากวันที่",
+    chipTo: "ถึงวันที่",
+    chipRows: "จำนวนแถว",
+  },
+  en: {
+    workspaceTitle: "Operations Workspace",
+    workspaceDesc: "Switch by responsibility: dashboard, investigations, and user control",
+    kpiTotal: "Total",
+    kpiActive: "Active",
+    kpiPending: "Pending",
+    tabDashboard: "Dashboard",
+    tabAudit: "Audit Logs",
+    tabUsers: "Users & Approvals",
+    sessionControlTitle: "Session Control",
+    sessionControlDesc: "This device stays signed in until you manually sign out",
+    signOut: "Sign Out",
+    signingOut: "Signing out...",
+    liveSnapshotTitle: "Live Operations Snapshot",
+    liveSnapshotDesc: "Real-time stats and latest security activities from admin APIs",
+    refreshStats: "Refresh Stats",
+    refreshing: "Refreshing...",
+    loadingStats: "Loading stats...",
+    totalUsers: "Total Users",
+    activeUsers: "Active Users",
+    adminUsers: "Admin Users",
+    pendingApprovals: "Pending Approvals",
+    reviewed24h: "Reviewed 24h",
+    sensitiveActions24h: "Sensitive Actions 24h",
+    auditTitle: "Audit Logs",
+    auditDesc: "Filter, sort, export, and paginate security events",
+    newestFirst: "Newest First",
+    oldestFirst: "Oldest First",
+    actionAz: "Action A-Z",
+    actionZa: "Action Z-A",
+    exportCsv: "Export CSV",
+    exporting: "Exporting...",
+    previous: "Previous",
+    next: "Next",
+    searchActionPlaceholder: "Search action...",
+    exactActionPlaceholder: "Exact action type",
+    rows10: "10 rows",
+    rows20: "20 rows",
+    rows50: "50 rows",
+    applyFilters: "Apply Filters",
+    loadingAudit: "Loading audit logs...",
+    noAudit: "No audit logs found.",
+    colNo: "#",
+    colAction: "Action",
+    colActor: "Actor",
+    colTargetUser: "Target User",
+    colCreatedAt: "Created At",
+    colMeta: "Meta",
+    usersTitle: "Users & Approvals",
+    usersDesc: "Pending approvals in this page",
+    usersGeneralTab: "General Users",
+    usersBackofficeTab: "Backoffice Users",
+    usersScopeGeneralDesc: "Showing role: pending, user",
+    usersScopeBackofficeDesc: "Showing role: approver, admin, super_admin",
+    nameAz: "Name A-Z",
+    nameZa: "Name Z-A",
+    roleAz: "Role A-Z",
+    statusAz: "Status A-Z",
+    searchUsersPlaceholder: "Search user by email, name, role, status...",
+    pendingOnly: "Pending approvals only",
+    refreshUsers: "Refresh Users",
+    loadingUsers: "Loading users...",
+    noUsers: "No users found for current filter.",
+    colUser: "User",
+    colRole: "Role",
+    colStatus: "Status",
+    colCreated: "Created",
+    colActions: "Actions",
+    approve: "Approve",
+    disable: "Disable",
+    delete: "Delete",
+    confirmDelete: "Delete this user account permanently?",
+    usersUpdated: "User updated successfully.",
+    usersDeleted: "User deleted successfully.",
+    errLoadStats: "Unable to load system stats.",
+    errLoadAudit: "Unable to load audit logs.",
+    errLoadUsers: "Unable to load users directory.",
+    errExportAudit: "Unable to export audit logs.",
+    errUpdateUser: "Unable to update user.",
+    errDeleteUser: "Unable to delete user.",
+    chipSearch: "Search",
+    chipAction: "Action",
+    chipFrom: "From",
+    chipTo: "To",
+    chipRows: "Rows",
+  },
+};
+
+function formatDateTime(value: string, locale: UiLocale) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("th-TH", {
+  return date.toLocaleString(locale === "th" ? "th-TH" : "en-US", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -136,7 +405,8 @@ function csvCell(value: unknown) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-export function DashboardLivePanels() {
+export function DashboardLivePanels({ locale }: { locale: UiLocale }) {
+  const text = UI_TEXT[locale];
   const [isNavigating, startTransition] = useTransition();
 
   const [stats, setStats] = useState<StatsPayload | null>(null);
@@ -166,6 +436,7 @@ export function DashboardLivePanels() {
   const [users, setUsers] = useState<UsersPayload | null>(null);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
+  const [userAccountType, setUserAccountType] = useState<UserAccountType>("general");
   const [userSearch, setUserSearch] = useState("");
   const deferredUserSearch = useDeferredValue(userSearch);
   const [showPendingOnly, setShowPendingOnly] = useState(false);
@@ -183,9 +454,12 @@ export function DashboardLivePanels() {
 
   const applyHashWorkspaceTab = useCallback(() => {
     if (typeof window === "undefined") return;
-    const mappedTab = HASH_TAB_MAP[window.location.hash];
-    if (!mappedTab) return;
-    setActiveTab(mappedTab);
+    const mapped = HASH_TAB_MAP[window.location.hash];
+    if (!mapped) return;
+    setActiveTab(mapped.tab);
+    if (mapped.accountType) {
+      setUserAccountType(mapped.accountType);
+    }
   }, []);
 
   const navigateToLogin = useCallback(
@@ -238,17 +512,17 @@ export function DashboardLivePanels() {
 
         const body = (await response.json().catch(() => null)) as unknown;
         if (!response.ok) {
-          throw new Error(normalizeApiError(body, "Unable to load system stats."));
+          throw new Error(normalizeApiError(body, text.errLoadStats));
         }
 
         setStats(body as StatsPayload);
       } catch (error) {
-        setStatsError(error instanceof Error ? error.message : "Unable to load system stats.");
+        setStatsError(error instanceof Error ? error.message : text.errLoadStats);
       } finally {
         setStatsLoading(false);
       }
     },
-    [handleUnauthorized],
+    [handleUnauthorized, text.errLoadStats],
   );
 
   const loadAudit = useCallback(async () => {
@@ -277,16 +551,16 @@ export function DashboardLivePanels() {
 
       const body = (await response.json().catch(() => null)) as unknown;
       if (!response.ok) {
-        throw new Error(normalizeApiError(body, "Unable to load audit logs."));
+        throw new Error(normalizeApiError(body, text.errLoadAudit));
       }
 
       setAudit(body as AuditPayload);
     } catch (error) {
-      setAuditError(error instanceof Error ? error.message : "Unable to load audit logs.");
+      setAuditError(error instanceof Error ? error.message : text.errLoadAudit);
     } finally {
       setAuditLoading(false);
     }
-  }, [auditCursor, auditFilter.action, auditFilter.from, auditFilter.limit, auditFilter.q, auditFilter.to, handleUnauthorized]);
+  }, [auditCursor, auditFilter.action, auditFilter.from, auditFilter.limit, auditFilter.q, auditFilter.to, handleUnauthorized, text.errLoadAudit]);
 
   const loadUsers = useCallback(async () => {
     setUsersLoading(true);
@@ -295,6 +569,7 @@ export function DashboardLivePanels() {
     try {
       const params = new URLSearchParams();
       params.set("limit", "12");
+      params.set("accountType", userAccountType);
       if (usersCursor) params.set("cursor", usersCursor);
 
       const response = await fetch(`/api/admin/users?${params.toString()}`, {
@@ -310,16 +585,16 @@ export function DashboardLivePanels() {
 
       const body = (await response.json().catch(() => null)) as unknown;
       if (!response.ok) {
-        throw new Error(normalizeApiError(body, "Unable to load users directory."));
+        throw new Error(normalizeApiError(body, text.errLoadUsers));
       }
 
       setUsers(body as UsersPayload);
     } catch (error) {
-      setUsersError(error instanceof Error ? error.message : "Unable to load users directory.");
+      setUsersError(error instanceof Error ? error.message : text.errLoadUsers);
     } finally {
       setUsersLoading(false);
     }
-  }, [handleUnauthorized, usersCursor]);
+  }, [handleUnauthorized, text.errLoadUsers, userAccountType, usersCursor]);
 
   useEffect(() => {
     void loadStats();
@@ -332,6 +607,11 @@ export function DashboardLivePanels() {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    setUsersCursor(null);
+    setUsersCursorStack([]);
+  }, [userAccountType]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -363,6 +643,9 @@ export function DashboardLivePanels() {
     const rows = users?.users ?? [];
     return rows.filter((row) => row.status === "pending_approval" || row.role === "pending").length;
   }, [users?.users]);
+
+  const usersScopeDescription =
+    userAccountType === "general" ? text.usersScopeGeneralDesc : text.usersScopeBackofficeDesc;
 
   const sortedAuditLogs = useMemo(() => {
     const rows = [...(audit?.logs ?? [])];
@@ -412,21 +695,25 @@ export function DashboardLivePanels() {
   const appliedAuditChips = useMemo(() => {
     const chips: Array<{ key: keyof AuditFilterApplied; label: string }> = [];
 
-    if (auditFilter.q) chips.push({ key: "q", label: `Search: ${auditFilter.q}` });
-    if (auditFilter.action) chips.push({ key: "action", label: `Action: ${auditFilter.action}` });
-    if (auditFilter.from) chips.push({ key: "from", label: `From: ${auditFilter.from}` });
-    if (auditFilter.to) chips.push({ key: "to", label: `To: ${auditFilter.to}` });
-    if (auditFilter.limit !== 10) chips.push({ key: "limit", label: `Rows: ${auditFilter.limit}` });
+    if (auditFilter.q) chips.push({ key: "q", label: `${text.chipSearch}: ${auditFilter.q}` });
+    if (auditFilter.action) chips.push({ key: "action", label: `${text.chipAction}: ${auditFilter.action}` });
+    if (auditFilter.from) chips.push({ key: "from", label: `${text.chipFrom}: ${auditFilter.from}` });
+    if (auditFilter.to) chips.push({ key: "to", label: `${text.chipTo}: ${auditFilter.to}` });
+    if (auditFilter.limit !== 10) chips.push({ key: "limit", label: `${text.chipRows}: ${auditFilter.limit}` });
 
     return chips;
-  }, [auditFilter]);
+  }, [auditFilter, text.chipAction, text.chipFrom, text.chipRows, text.chipSearch, text.chipTo]);
 
   const appliedUsersChips = useMemo(() => {
-    const chips: Array<{ key: "search" | "pending"; label: string }> = [];
-    if (userSearch.trim()) chips.push({ key: "search", label: `Search: ${userSearch.trim()}` });
-    if (showPendingOnly) chips.push({ key: "pending", label: "Pending only" });
+    const chips: Array<{ key: "search" | "pending" | "scope"; label: string }> = [];
+    chips.push({
+      key: "scope",
+      label: userAccountType === "general" ? text.usersGeneralTab : text.usersBackofficeTab,
+    });
+    if (userSearch.trim()) chips.push({ key: "search", label: `${text.chipSearch}: ${userSearch.trim()}` });
+    if (showPendingOnly) chips.push({ key: "pending", label: text.pendingOnly });
     return chips;
-  }, [showPendingOnly, userSearch]);
+  }, [showPendingOnly, text.chipSearch, text.pendingOnly, text.usersBackofficeTab, text.usersGeneralTab, userAccountType, userSearch]);
 
   function applyAuditFilter(next: AuditFilterApplied) {
     setAuditCursor(null);
@@ -447,9 +734,13 @@ export function DashboardLivePanels() {
     applyAuditFilter(next);
   }
 
-  function removeUsersChip(key: "search" | "pending") {
+  function removeUsersChip(key: "search" | "pending" | "scope") {
     if (key === "search") setUserSearch("");
     if (key === "pending") setShowPendingOnly(false);
+    if (key === "scope") {
+      setUserAccountType("general");
+      if (typeof window !== "undefined") window.location.hash = "workspace-users-general";
+    }
   }
 
   async function exportAuditCsv() {
@@ -478,7 +769,7 @@ export function DashboardLivePanels() {
 
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as unknown;
-        throw new Error(normalizeApiError(body, "Unable to export audit logs."));
+        throw new Error(normalizeApiError(body, text.errExportAudit));
       }
 
       const blob = await response.blob();
@@ -492,7 +783,7 @@ export function DashboardLivePanels() {
       anchor.remove();
       URL.revokeObjectURL(objectUrl);
     } catch (error) {
-      setAuditError(error instanceof Error ? error.message : "Unable to export audit logs.");
+      setAuditError(error instanceof Error ? error.message : text.errExportAudit);
     } finally {
       setIsExportingAudit(false);
     }
@@ -542,21 +833,21 @@ export function DashboardLivePanels() {
 
       const body = (await response.json().catch(() => null)) as unknown;
       if (!response.ok) {
-        throw new Error(normalizeApiError(body, "Unable to update user."));
+        throw new Error(normalizeApiError(body, text.errUpdateUser));
       }
 
-      setUsersMessage("User updated successfully.");
+      setUsersMessage(text.usersUpdated);
       void loadUsers();
       void loadStats(true);
     } catch (error) {
-      setUsersMessage(error instanceof Error ? error.message : "Unable to update user.");
+      setUsersMessage(error instanceof Error ? error.message : text.errUpdateUser);
     } finally {
       setActingUserId(null);
     }
   }
 
   async function deleteUser(userId: string) {
-    const confirmed = window.confirm("Delete this user account permanently?");
+    const confirmed = window.confirm(text.confirmDelete);
     if (!confirmed) return;
 
     setUsersMessage(null);
@@ -575,14 +866,14 @@ export function DashboardLivePanels() {
 
       const body = (await response.json().catch(() => null)) as unknown;
       if (!response.ok) {
-        throw new Error(normalizeApiError(body, "Unable to delete user."));
+        throw new Error(normalizeApiError(body, text.errDeleteUser));
       }
 
-      setUsersMessage("User deleted successfully.");
+      setUsersMessage(text.usersDeleted);
       void loadUsers();
       void loadStats(true);
     } catch (error) {
-      setUsersMessage(error instanceof Error ? error.message : "Unable to delete user.");
+      setUsersMessage(error instanceof Error ? error.message : text.errDeleteUser);
     } finally {
       setActingUserId(null);
     }
@@ -593,16 +884,24 @@ export function DashboardLivePanels() {
       <div className="workspace-anchor" id="workspace-dashboard" />
       <div className="workspace-anchor" id="workspace-audit" />
       <div className="workspace-anchor" id="workspace-users" />
+      <div className="workspace-anchor" id="workspace-users-general" />
+      <div className="workspace-anchor" id="workspace-users-backoffice" />
       <section className="panel workspace-tabs-panel mt-4">
         <div className="workspace-head">
           <div>
-            <h3 className="text-base font-semibold">Operations Workspace</h3>
-            <p className="mt-1 text-sm muted">Switch by responsibility: executive dashboard, audit investigations, or user control.</p>
+            <h3 className="text-base font-semibold">{text.workspaceTitle}</h3>
+            <p className="mt-1 text-sm muted">{text.workspaceDesc}</p>
           </div>
           <div className="workspace-kpi-row">
-            <span className="workspace-kpi">Total: {stats?.totalUsers ?? 0}</span>
-            <span className="workspace-kpi">Active: {stats?.activeUsers ?? 0}</span>
-            <span className="workspace-kpi">Pending: {stats?.pendingApprovals ?? 0}</span>
+            <span className="workspace-kpi">
+              {text.kpiTotal}: {stats?.totalUsers ?? 0}
+            </span>
+            <span className="workspace-kpi">
+              {text.kpiActive}: {stats?.activeUsers ?? 0}
+            </span>
+            <span className="workspace-kpi">
+              {text.kpiPending}: {stats?.pendingApprovals ?? 0}
+            </span>
           </div>
         </div>
 
@@ -614,12 +913,13 @@ export function DashboardLivePanels() {
               onClick={() => {
                 setActiveTab(tab.id);
                 if (typeof window !== "undefined") {
-                  window.location.hash = `workspace-${tab.id}`;
+                  window.location.hash =
+                    tab.id === "users" ? `workspace-users-${userAccountType}` : `workspace-${tab.id}`;
                 }
               }}
               type="button"
             >
-              {tab.label}
+              {text[tab.labelKey]}
             </button>
           ))}
         </div>
@@ -630,8 +930,8 @@ export function DashboardLivePanels() {
       <section className="panel mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold">Session Control</h3>
-            <p className="mt-1 text-sm muted">This device stays signed in until you manually sign out.</p>
+            <h3 className="text-base font-semibold">{text.sessionControlTitle}</h3>
+            <p className="mt-1 text-sm muted">{text.sessionControlDesc}</p>
           </div>
           <button
             className="danger-button"
@@ -641,7 +941,7 @@ export function DashboardLivePanels() {
             }}
             type="button"
           >
-            {signingOut || isNavigating ? "Signing out..." : "Sign Out"}
+            {signingOut || isNavigating ? text.signingOut : text.signOut}
           </button>
         </div>
       </section>
@@ -649,8 +949,8 @@ export function DashboardLivePanels() {
       <section className="panel mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold">Live Operations Snapshot</h3>
-            <p className="mt-1 text-sm muted">Real-time stats and latest security activities from admin APIs.</p>
+            <h3 className="text-base font-semibold">{text.liveSnapshotTitle}</h3>
+            <p className="mt-1 text-sm muted">{text.liveSnapshotDesc}</p>
           </div>
           <button
             className="ghost-button"
@@ -660,38 +960,38 @@ export function DashboardLivePanels() {
             }}
             type="button"
           >
-            {statsLoading ? "Refreshing..." : "Refresh Stats"}
+            {statsLoading ? text.refreshing : text.refreshStats}
           </button>
         </div>
 
         {statsError ? <p className="error-banner mt-3 text-sm">{statsError}</p> : null}
 
         {statsLoading ? (
-          <p className="mt-4 text-sm muted">Loading stats...</p>
+          <p className="mt-4 text-sm muted">{text.loadingStats}</p>
         ) : (
           <div className="metric-grid mt-4">
             <article className="metric-card">
-              <h4>Total Users</h4>
+              <h4>{text.totalUsers}</h4>
               <p>{stats?.totalUsers ?? 0}</p>
             </article>
             <article className="metric-card">
-              <h4>Active Users</h4>
+              <h4>{text.activeUsers}</h4>
               <p>{stats?.activeUsers ?? 0}</p>
             </article>
             <article className="metric-card">
-              <h4>Admin Users</h4>
+              <h4>{text.adminUsers}</h4>
               <p>{stats?.adminUsers ?? 0}</p>
             </article>
             <article className="metric-card">
-              <h4>Pending Approvals</h4>
+              <h4>{text.pendingApprovals}</h4>
               <p>{stats?.pendingApprovals ?? 0}</p>
             </article>
             <article className="metric-card">
-              <h4>Reviewed 24h</h4>
+              <h4>{text.reviewed24h}</h4>
               <p>{stats?.reviewedApprovals24h ?? 0}</p>
             </article>
             <article className="metric-card">
-              <h4>Sensitive Actions 24h</h4>
+              <h4>{text.sensitiveActions24h}</h4>
               <p>{stats?.recentSensitiveActions24h ?? 0}</p>
             </article>
           </div>
@@ -704,8 +1004,8 @@ export function DashboardLivePanels() {
       <section className="panel mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold">Audit Logs</h3>
-            <p className="mt-1 text-sm muted">Filter, sort, export, and paginate security events.</p>
+            <h3 className="text-base font-semibold">{text.auditTitle}</h3>
+            <p className="mt-1 text-sm muted">{text.auditDesc}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -713,13 +1013,13 @@ export function DashboardLivePanels() {
               onChange={(event) => setAuditSortMode(event.target.value as AuditSortMode)}
               value={auditSortMode}
             >
-              <option value="created_desc">Newest First</option>
-              <option value="created_asc">Oldest First</option>
-              <option value="action_asc">Action A-Z</option>
-              <option value="action_desc">Action Z-A</option>
+              <option value="created_desc">{text.newestFirst}</option>
+              <option value="created_asc">{text.oldestFirst}</option>
+              <option value="action_asc">{text.actionAz}</option>
+              <option value="action_desc">{text.actionZa}</option>
             </select>
             <button className="ghost-button" disabled={isExportingAudit} onClick={() => void exportAuditCsv()} type="button">
-              {isExportingAudit ? "Exporting..." : "Export CSV"}
+              {isExportingAudit ? text.exporting : text.exportCsv}
             </button>
             <button
               className="ghost-button"
@@ -735,7 +1035,7 @@ export function DashboardLivePanels() {
               }}
               type="button"
             >
-              Previous
+              {text.previous}
             </button>
             <button
               className="ghost-button"
@@ -746,7 +1046,7 @@ export function DashboardLivePanels() {
               }}
               type="button"
             >
-              Next
+              {text.next}
             </button>
           </div>
         </div>
@@ -755,14 +1055,14 @@ export function DashboardLivePanels() {
           <input
             className="admin-input"
             onChange={(event) => setAuditDraftFilter((prev) => ({ ...prev, q: event.target.value }))}
-            placeholder="Search action..."
+            placeholder={text.searchActionPlaceholder}
             type="text"
             value={auditDraftFilter.q}
           />
           <input
             className="admin-input"
             onChange={(event) => setAuditDraftFilter((prev) => ({ ...prev, action: event.target.value }))}
-            placeholder="Exact action type"
+            placeholder={text.exactActionPlaceholder}
             type="text"
             value={auditDraftFilter.action}
           />
@@ -788,9 +1088,9 @@ export function DashboardLivePanels() {
             }
             value={String(auditDraftFilter.limit)}
           >
-            <option value="10">10 rows</option>
-            <option value="20">20 rows</option>
-            <option value="50">50 rows</option>
+            <option value="10">{text.rows10}</option>
+            <option value="20">{text.rows20}</option>
+            <option value="50">{text.rows50}</option>
           </select>
           <button
             className="primary-button"
@@ -799,7 +1099,7 @@ export function DashboardLivePanels() {
             }}
             type="button"
           >
-            Apply Filters
+            {text.applyFilters}
           </button>
         </div>
 
@@ -815,25 +1115,25 @@ export function DashboardLivePanels() {
 
         {auditError ? <p className="error-banner mt-3 text-sm">{auditError}</p> : null}
         {auditLoading ? (
-          <p className="mt-4 text-sm muted">Loading audit logs...</p>
+          <p className="mt-4 text-sm muted">{text.loadingAudit}</p>
         ) : (
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Action</th>
-                  <th>Actor</th>
-                  <th>Target User</th>
-                  <th>Created At</th>
-                  <th>Meta</th>
+                  <th>{text.colNo}</th>
+                  <th>{text.colAction}</th>
+                  <th>{text.colActor}</th>
+                  <th>{text.colTargetUser}</th>
+                  <th>{text.colCreatedAt}</th>
+                  <th>{text.colMeta}</th>
                 </tr>
               </thead>
               <tbody>
                 {(audit?.logs ?? []).length === 0 ? (
                   <tr>
                     <td className="muted" colSpan={6}>
-                      No audit logs found.
+                      {text.noAudit}
                     </td>
                   </tr>
                 ) : (
@@ -849,7 +1149,7 @@ export function DashboardLivePanels() {
                       <td title={toCellText(log.target_user_id)}>
                         <span className="cell-ellipsis">{truncateText(toCellText(log.target_user_id), 24)}</span>
                       </td>
-                      <td>{formatDateTime(log.created_at)}</td>
+                      <td>{formatDateTime(log.created_at, locale)}</td>
                       <td title={formatAuditMeta(log.metadata_json)}>
                         <span className="cell-ellipsis">{truncateText(formatAuditMeta(log.metadata_json), 88)}</span>
                       </td>
@@ -867,10 +1167,34 @@ export function DashboardLivePanels() {
       <section className="panel mt-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold">Users & Approvals</h3>
+            <h3 className="text-base font-semibold">{text.usersTitle}</h3>
             <p className="mt-1 text-sm muted">
-              Pending approvals in this page: <strong>{pendingCount}</strong>
+              {text.usersDesc}: <strong>{pendingCount}</strong>
             </p>
+            <p className="mt-1 text-xs muted">{usersScopeDescription}</p>
+          </div>
+
+          <div className="user-account-switch">
+            <button
+              className={`user-account-btn ${userAccountType === "general" ? "user-account-btn-active" : ""}`}
+              onClick={() => {
+                setUserAccountType("general");
+                if (typeof window !== "undefined") window.location.hash = "workspace-users-general";
+              }}
+              type="button"
+            >
+              {text.usersGeneralTab}
+            </button>
+            <button
+              className={`user-account-btn ${userAccountType === "backoffice" ? "user-account-btn-active" : ""}`}
+              onClick={() => {
+                setUserAccountType("backoffice");
+                if (typeof window !== "undefined") window.location.hash = "workspace-users-backoffice";
+              }}
+              type="button"
+            >
+              {text.usersBackofficeTab}
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -879,15 +1203,15 @@ export function DashboardLivePanels() {
               onChange={(event) => setUserSortMode(event.target.value as UserSortMode)}
               value={userSortMode}
             >
-              <option value="created_desc">Newest First</option>
-              <option value="created_asc">Oldest First</option>
-              <option value="name_asc">Name A-Z</option>
-              <option value="name_desc">Name Z-A</option>
-              <option value="role_asc">Role A-Z</option>
-              <option value="status_asc">Status A-Z</option>
+              <option value="created_desc">{text.newestFirst}</option>
+              <option value="created_asc">{text.oldestFirst}</option>
+              <option value="name_asc">{text.nameAz}</option>
+              <option value="name_desc">{text.nameZa}</option>
+              <option value="role_asc">{text.roleAz}</option>
+              <option value="status_asc">{text.statusAz}</option>
             </select>
             <button className="ghost-button" disabled={isExportingUsers} onClick={() => void exportUsersCsv()} type="button">
-              {isExportingUsers ? "Exporting..." : "Export CSV"}
+              {isExportingUsers ? text.exporting : text.exportCsv}
             </button>
             <button
               className="ghost-button"
@@ -903,7 +1227,7 @@ export function DashboardLivePanels() {
               }}
               type="button"
             >
-              Previous
+              {text.previous}
             </button>
             <button
               className="ghost-button"
@@ -914,7 +1238,7 @@ export function DashboardLivePanels() {
               }}
               type="button"
             >
-              Next
+              {text.next}
             </button>
           </div>
         </div>
@@ -923,7 +1247,7 @@ export function DashboardLivePanels() {
           <input
             className="admin-input"
             onChange={(event) => setUserSearch(event.target.value)}
-            placeholder="Search user by email, name, role, status..."
+            placeholder={text.searchUsersPlaceholder}
             type="text"
             value={userSearch}
           />
@@ -933,7 +1257,7 @@ export function DashboardLivePanels() {
               onChange={(event) => setShowPendingOnly(event.target.checked)}
               type="checkbox"
             />
-            Pending approvals only
+            {text.pendingOnly}
           </label>
           <button
             className="ghost-button"
@@ -943,7 +1267,7 @@ export function DashboardLivePanels() {
             }}
             type="button"
           >
-            {usersLoading ? "Refreshing..." : "Refresh Users"}
+            {usersLoading ? text.refreshing : text.refreshUsers}
           </button>
         </div>
 
@@ -961,25 +1285,25 @@ export function DashboardLivePanels() {
         {usersMessage ? <p className="success-banner mt-3 text-sm">{usersMessage}</p> : null}
 
         {usersLoading ? (
-          <p className="mt-4 text-sm muted">Loading users...</p>
+          <p className="mt-4 text-sm muted">{text.loadingUsers}</p>
         ) : (
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>User</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Actions</th>
+                  <th>{text.colNo}</th>
+                  <th>{text.colUser}</th>
+                  <th>{text.colRole}</th>
+                  <th>{text.colStatus}</th>
+                  <th>{text.colCreated}</th>
+                  <th>{text.colActions}</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedUsers.length === 0 ? (
                   <tr>
                     <td className="muted" colSpan={6}>
-                      No users found for current filter.
+                      {text.noUsers}
                     </td>
                   </tr>
                 ) : (
@@ -1014,7 +1338,7 @@ export function DashboardLivePanels() {
                       <td>
                         <span className={`status-pill status-${user.status}`}>{user.status}</span>
                       </td>
-                      <td>{formatDateTime(user.created_at)}</td>
+                      <td>{formatDateTime(user.created_at, locale)}</td>
                       <td>
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -1029,7 +1353,7 @@ export function DashboardLivePanels() {
                             }}
                             type="button"
                           >
-                            Approve
+                            {text.approve}
                           </button>
                           <button
                             className="ghost-button compact-button"
@@ -1039,7 +1363,7 @@ export function DashboardLivePanels() {
                             }}
                             type="button"
                           >
-                            Disable
+                            {text.disable}
                           </button>
                           <button
                             className="danger-button compact-button"
@@ -1049,7 +1373,7 @@ export function DashboardLivePanels() {
                             }}
                             type="button"
                           >
-                            Delete
+                            {text.delete}
                           </button>
                         </div>
                       </td>

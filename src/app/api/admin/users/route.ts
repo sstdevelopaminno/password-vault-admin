@@ -16,6 +16,8 @@ const patchPayloadSchema = z.object({
   fullName: z.string().trim().min(1).max(120).optional(),
 });
 
+const accountTypeSchema = z.enum(["general", "backoffice", "all"]).default("general");
+
 function parseLimit(raw: string | null, fallback = 50, max = 100) {
   const value = Number(raw ?? fallback);
   if (!Number.isFinite(value)) return fallback;
@@ -99,6 +101,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const limit = parseLimit(url.searchParams.get("limit"));
     const cursor = decodeCursor(url.searchParams.get("cursor"));
+    const accountType = accountTypeSchema.parse(url.searchParams.get("accountType") ?? undefined);
 
     const admin = createAdminClient();
     let query = admin
@@ -107,6 +110,12 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(limit + 1);
+
+    if (accountType === "general") {
+      query = query.in("role", ["pending", "user"]);
+    } else if (accountType === "backoffice") {
+      query = query.in("role", ["approver", "admin", "super_admin"]);
+    }
 
     if (cursor) {
       query = query.or(
@@ -132,13 +141,16 @@ export async function GET(request: Request) {
           })
         : null;
 
-    logApiSuccess(ctx, 200, { source: "native" });
+    logApiSuccess(ctx, 200, { source: "native", accountType });
     return jsonData(
       ctx,
-      { users: currentPage, pagination: { limit, hasMore, nextCursor } },
+      { users: currentPage, pagination: { limit, hasMore, nextCursor }, accountType },
       { headers: { "x-users-source": "native" } },
     );
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return jsonError(ctx, "Invalid accountType", { status: 400 });
+    }
     logApiError(ctx, 500, error, { route: ROUTE });
     return jsonError(ctx, "Unable to load users", { status: 500 });
   }

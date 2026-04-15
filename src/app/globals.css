@@ -622,6 +622,34 @@ a {
   gap: 8px;
 }
 
+.user-account-switch {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.user-account-btn {
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.76);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #355473;
+  cursor: pointer;
+}
+
+.user-account-btn:hover {
+  border-color: rgba(45, 120, 201, 0.45);
+}
+
+.user-account-btn-active {
+  border-color: rgba(27, 87, 149, 0.62);
+  background: linear-gradient(90deg, #2f84d8, #1f5f9f);
+  color: #fff;
+}
+
 .workspace-tab {
   display: inline-flex;
   align-items: center;
