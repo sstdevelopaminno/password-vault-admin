@@ -19,6 +19,7 @@
 html,
 body {
   min-height: 100%;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -45,6 +46,170 @@ a {
     0 24px 60px rgba(23, 48, 76, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(10px);
+}
+
+.support-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.support-sidebar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 100%;
+  position: sticky;
+  top: 14px;
+  border: 1px solid rgba(21, 64, 102, 0.2);
+  border-radius: 20px;
+  background:
+    radial-gradient(320px 240px at -4% -8%, rgba(255, 255, 255, 0.35), transparent 72%),
+    linear-gradient(180deg, #19497a, #0d2f52 68%, #0a2745);
+  color: #e6f2ff;
+  padding: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 16px 32px rgba(10, 33, 57, 0.28);
+}
+
+.support-brand-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.support-brand-logo {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  border: 1px solid rgba(179, 216, 255, 0.48);
+  background: rgba(255, 255, 255, 0.2);
+  object-fit: contain;
+  padding: 6px;
+}
+
+.support-brand-company {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.support-brand-system {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: rgba(216, 236, 255, 0.88);
+}
+
+.support-role-pill {
+  margin: 12px 0 0;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 225, 255, 0.44);
+  background: rgba(255, 255, 255, 0.18);
+  color: #eff8ff;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.support-nav-list {
+  display: grid;
+  gap: 10px;
+}
+
+.support-nav-item {
+  display: block;
+  text-decoration: none;
+  border: 1px solid rgba(189, 223, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.11);
+  padding: 12px;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.support-nav-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(213, 236, 255, 0.5);
+  background: rgba(255, 255, 255, 0.17);
+}
+
+.support-nav-link:focus-visible {
+  outline: 2px solid rgba(214, 237, 255, 0.75);
+  outline-offset: 2px;
+}
+
+.support-nav-id {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(198, 227, 255, 0.95);
+}
+
+.support-nav-title {
+  margin: 7px 0 0;
+  font-size: 15px;
+  line-height: 1.28;
+  font-weight: 700;
+  color: #f3f9ff;
+}
+
+.support-nav-desc {
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(215, 236, 255, 0.88);
+}
+
+.support-sidebar-note {
+  border: 1px solid rgba(176, 215, 255, 0.26);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 12px;
+}
+
+.support-sidebar-note h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.support-sidebar-note p {
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(221, 238, 255, 0.88);
+}
+
+.support-main {
+  min-width: 0;
+}
+
+.support-hero {
+  border-radius: 20px;
+}
+
+.support-scope-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.support-scope-item {
+  border: 1px solid rgba(45, 120, 201, 0.26);
+  border-radius: 12px;
+  background: rgba(248, 252, 255, 0.86);
+  padding: 11px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #1d3f62;
 }
 
 .auth-page {
@@ -482,6 +647,13 @@ a {
   color: #fff;
 }
 
+.workspace-anchor {
+  position: relative;
+  top: -12px;
+  height: 0;
+  visibility: hidden;
+}
+
 .badge {
   display: inline-block;
   font-size: 11px;
@@ -813,6 +985,14 @@ a {
     margin: 14px auto;
   }
 
+  .support-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .support-sidebar {
+    position: static;
+  }
+
   .metric-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -838,6 +1018,10 @@ a {
 
   .auth-form-v4 .primary-button {
     width: 100%;
+  }
+
+  .support-scope-list {
+    grid-template-columns: 1fr;
   }
 }
 

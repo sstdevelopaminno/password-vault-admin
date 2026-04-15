@@ -70,6 +70,12 @@ type WorkspaceTab = (typeof WORKSPACE_TABS)[number]["id"];
 type AuditSortMode = "created_desc" | "created_asc" | "action_asc" | "action_desc";
 type UserSortMode = "created_desc" | "created_asc" | "name_asc" | "name_desc" | "role_asc" | "status_asc";
 
+const HASH_TAB_MAP: Record<string, WorkspaceTab> = {
+  "#workspace-dashboard": "dashboard",
+  "#workspace-audit": "audit",
+  "#workspace-users": "users",
+};
+
 function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -174,6 +180,13 @@ export function DashboardLivePanels() {
   const [userSortMode, setUserSortMode] = useState<UserSortMode>("created_desc");
   const [isExportingAudit, setIsExportingAudit] = useState(false);
   const [isExportingUsers, setIsExportingUsers] = useState(false);
+
+  const applyHashWorkspaceTab = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const mappedTab = HASH_TAB_MAP[window.location.hash];
+    if (!mappedTab) return;
+    setActiveTab(mappedTab);
+  }, []);
 
   const navigateToLogin = useCallback(
     (reason: "manual" | "unauthorized") => {
@@ -319,6 +332,15 @@ export function DashboardLivePanels() {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    applyHashWorkspaceTab();
+    window.addEventListener("hashchange", applyHashWorkspaceTab);
+    return () => {
+      window.removeEventListener("hashchange", applyHashWorkspaceTab);
+    };
+  }, [applyHashWorkspaceTab]);
 
   const filteredUsers = useMemo(() => {
     const keyword = deferredUserSearch.trim().toLowerCase();
@@ -568,6 +590,9 @@ export function DashboardLivePanels() {
 
   return (
     <>
+      <div className="workspace-anchor" id="workspace-dashboard" />
+      <div className="workspace-anchor" id="workspace-audit" />
+      <div className="workspace-anchor" id="workspace-users" />
       <section className="panel workspace-tabs-panel mt-4">
         <div className="workspace-head">
           <div>
@@ -586,7 +611,12 @@ export function DashboardLivePanels() {
             <button
               key={tab.id}
               className={`workspace-tab ${activeTab === tab.id ? "workspace-tab-active" : ""}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (typeof window !== "undefined") {
+                  window.location.hash = `workspace-${tab.id}`;
+                }
+              }}
               type="button"
             >
               {tab.label}
