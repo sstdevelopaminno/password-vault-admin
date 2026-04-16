@@ -1,4 +1,5 @@
 import { SupportWorkspace } from "@/components/support-workspace";
+import { SupportHeaderActions } from "@/components/support-header-actions";
 import { requireAdminSession } from "@/lib/auth";
 import { resolveAdminLocale, t, type AdminLocale } from "@/lib/i18n";
 
@@ -12,45 +13,41 @@ type RoleGroup = "support" | "it" | "owner";
 type SidebarMenuItem = {
   id: string;
   title: string;
-  desc: string;
   href: string;
   visibleTo: RoleGroup[];
 };
+
+type MenuIcon = "dashboard" | "users" | "tickets" | "billing" | "recovery" | "default";
 
 const MENU_ITEMS: Record<AdminLocale, SidebarMenuItem[]> = {
   th: [
     {
       id: "1",
       title: "แดชบอร์ด",
-      desc: "ภาพรวมงานของทีม Support",
       href: "#workspace-dashboard",
       visibleTo: ["support", "owner", "it"],
     },
     {
       id: "2",
       title: "เช็ครายชื่อผู้ใช้งานทั่วไป",
-      desc: "ดูข้อมูลและประวัติการใช้งานรายผู้ใช้",
       href: "#workspace-users-general",
       visibleTo: ["support", "owner"],
     },
     {
       id: "3",
       title: "คำร้องจากศูนย์ช่วยเหลือ",
-      desc: "ติดตามคำร้อง ดำเนินการ และปิดงาน",
       href: "#workspace-tickets",
       visibleTo: ["support", "owner", "it"],
     },
     {
       id: "4",
       title: "ตรวจสอบยอดชำระเงิน",
-      desc: "สถานะสำเร็จ ไม่สำเร็จ ค้างชำระ และต่ออายุ",
       href: "#workspace-billing",
       visibleTo: ["support", "owner"],
     },
     {
       id: "5",
       title: "กู้คืนข้อมูลผู้ใช้งาน",
-      desc: "ยืนยัน OTP และติดตามผลการกู้คืนข้อมูล",
       href: "#workspace-recovery",
       visibleTo: ["support", "owner", "it"],
     },
@@ -59,35 +56,30 @@ const MENU_ITEMS: Record<AdminLocale, SidebarMenuItem[]> = {
     {
       id: "1",
       title: "Dashboard",
-      desc: "Support team daily overview",
       href: "#workspace-dashboard",
       visibleTo: ["support", "owner", "it"],
     },
     {
       id: "2",
       title: "General Users",
-      desc: "Inspect user profile and usage history",
       href: "#workspace-users-general",
       visibleTo: ["support", "owner"],
     },
     {
       id: "3",
       title: "Help Center Tickets",
-      desc: "Track, process, resolve, or cancel requests",
       href: "#workspace-tickets",
       visibleTo: ["support", "owner", "it"],
     },
     {
       id: "4",
       title: "Billing Monitor",
-      desc: "Paid, failed, pending, and renewal operations",
       href: "#workspace-billing",
       visibleTo: ["support", "owner"],
     },
     {
       id: "5",
       title: "Data Recovery",
-      desc: "OTP validation and recovery completion flow",
       href: "#workspace-recovery",
       visibleTo: ["support", "owner", "it"],
     },
@@ -112,6 +104,66 @@ function roleDisplayText(locale: AdminLocale, group: RoleGroup, rawRole: string)
   return `Current role: Support Admin (${rawRole})`;
 }
 
+function iconForHref(href: string): MenuIcon {
+  if (href === "#workspace-dashboard") return "dashboard";
+  if (href === "#workspace-users-general") return "users";
+  if (href === "#workspace-tickets") return "tickets";
+  if (href === "#workspace-billing") return "billing";
+  if (href === "#workspace-recovery") return "recovery";
+  return "default";
+}
+
+function renderMenuIcon(icon: MenuIcon) {
+  if (icon === "dashboard") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M3 13h8V3H3v10Zm10 8h8V11h-8v10Zm0-18v6h8V3h-8ZM3 21h8v-6H3v6Z" />
+      </svg>
+    );
+  }
+  if (icon === "users") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    );
+  }
+  if (icon === "tickets") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M4 7h16v10H4z" />
+        <path d="M8 7V5h8v2" />
+        <path d="M8 12h8" />
+      </svg>
+    );
+  }
+  if (icon === "billing") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="M3 10h18" />
+        <path d="M7 15h4" />
+      </svg>
+    );
+  }
+  if (icon === "recovery") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M21 12a9 9 0 1 1-3.2-6.9" />
+        <path d="M21 3v6h-6" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  );
+}
+
 export default async function HomePage() {
   const locale = await resolveAdminLocale();
   const { profile } = await requireAdminSession();
@@ -120,9 +172,18 @@ export default async function HomePage() {
 
   return (
     <>
-      <main className="office-shell support-shell p-4 md:p-5">
+      <div className="support-layout">
+        <input className="support-sidebar-toggle-input" id="support-sidebar-toggle" type="checkbox" />
+        <main className="office-shell support-shell p-4 md:p-5">
         <aside className="support-sidebar">
           <div className="support-sidebar-top">
+            <div className="support-sidebar-toolbar">
+              <label aria-label="Toggle menu sidebar" className="support-sidebar-toggle" htmlFor="support-sidebar-toggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="m9 6 6 6-6 6" />
+                </svg>
+              </label>
+            </div>
             <div className="support-brand-block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img alt="Password Vault Logo" className="support-brand-logo" src={SUPPORT_BRAND_LOGO_URL} />
@@ -134,41 +195,33 @@ export default async function HomePage() {
             </div>
 
             <nav className="support-nav-list mt-5" aria-label="Support menu">
-              <p className="support-nav-heading">{locale === "th" ? "เมนู" : "Menu"}</p>
               {visibleMenuItems.map((menu, index) => (
                 <a
                   key={menu.id}
                   className={`support-nav-item support-nav-link ${index === 0 ? "support-nav-item-active" : ""}`}
                   href={menu.href}
-                  title={menu.desc}
+                  aria-label={menu.title}
                 >
-                  <span aria-hidden className="support-nav-index">
-                    {menu.id}
+                  <span aria-hidden className="support-nav-icon">
+                    {renderMenuIcon(iconForHref(menu.href))}
                   </span>
                   <span className="support-nav-content">
                     <span className="support-nav-title">{menu.title}</span>
-                    <span className="support-nav-desc">{menu.desc}</span>
                   </span>
                 </a>
               ))}
             </nav>
           </div>
-
-          <article className="support-sidebar-note">
-            <h3>{locale === "th" ? "Workflow Rule" : "Workflow Rule"}</h3>
-            <p>
-              {locale === "th"
-                ? "ทุกการดำเนินการของ Support จะถูกบันทึกและตรวจสอบย้อนกลับได้"
-                : "Every support action is logged for traceability and escalation control."}
-            </p>
-          </article>
         </aside>
 
         <section className="support-main">
           <header className="panel support-hero" id="support-top">
             <div className="support-hero-top">
               <span className="badge">Helpdesk Backoffice</span>
-              <span className="support-hero-role">{roleDisplayText(locale, roleGroup, profile.role)}</span>
+              <div className="support-hero-top-right">
+                <span className="support-hero-role">{roleDisplayText(locale, roleGroup, profile.role)}</span>
+                <SupportHeaderActions locale={locale} />
+              </div>
             </div>
             <h1 className="mt-3 text-3xl font-extrabold tracking-tight">{t(locale, "appTitle")}</h1>
             <p className="mt-2 max-w-4xl text-sm md:text-[15px] muted">{t(locale, "appSubtitle")}</p>
@@ -176,7 +229,8 @@ export default async function HomePage() {
 
           <SupportWorkspace locale={locale} roleGroup={roleGroup} />
         </section>
-      </main>
+        </main>
+      </div>
 
       <section className="screen-warning">
         <div className="screen-warning-card">

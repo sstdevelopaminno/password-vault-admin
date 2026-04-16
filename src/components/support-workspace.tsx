@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type UiLocale = "th" | "en";
 type RoleGroup = "support" | "it" | "owner";
@@ -61,6 +60,14 @@ type BillingDraft = {
   expiresAt: string;
 };
 
+type ToastKind = "success" | "error";
+
+type ToastState = {
+  id: number;
+  kind: ToastKind;
+  message: string;
+};
+
 type UserInsight = {
   profile: {
     id: string;
@@ -105,6 +112,8 @@ const TAB_TO_HASH: Record<MenuTab, string> = {
   billing: "workspace-billing",
   recovery: "workspace-recovery",
 };
+
+const UNAUTHORIZED_ERROR = "Unauthorized";
 
 const TEXT = {
   th: {
@@ -175,9 +184,61 @@ function normalizeApiError(body: unknown, fallback: string) {
   return fallback;
 }
 
+function localized(locale: UiLocale, th: string, en: string) {
+  return locale === "th" ? th : en;
+}
+
+function formatPackageLabel(locale: UiLocale, value: string) {
+  const map: Record<string, string> = locale === "th"
+    ? { free: "ฟรี", monthly: "รายเดือน", annual: "รายปี" }
+    : { free: "Free", monthly: "Monthly", annual: "Annual" };
+  return map[value] ?? value;
+}
+
+function formatPaymentLabel(locale: UiLocale, value: string) {
+  const map: Record<string, string> = locale === "th"
+    ? { paid: "ชำระสำเร็จ", failed: "ชำระไม่สำเร็จ", pending: "รอดำเนินการ", overdue: "ค้างชำระ" }
+    : { paid: "Paid", failed: "Failed", pending: "Pending", overdue: "Overdue" };
+  return map[value] ?? value;
+}
+
+function formatStatusLabel(locale: UiLocale, value: string) {
+  const map: Record<string, string> = locale === "th"
+    ? {
+      open: "เปิดรายการ",
+      in_progress: "กำลังดำเนินการ",
+      resolved: "เสร็จสิ้น",
+      closed: "ปิดรายการ",
+      idle: "รอคำขอ",
+      requested: "ส่งคำขอแล้ว",
+      otp_verified: "ยืนยัน OTP แล้ว",
+      completed: "กู้คืนสำเร็จ",
+      rejected: "ปฏิเสธ",
+      active: "ใช้งาน",
+      pending_approval: "รออนุมัติ",
+      pending: "รอดำเนินการ",
+      disabled: "ปิดใช้งาน",
+    }
+    : {
+      open: "Open",
+      in_progress: "In Progress",
+      resolved: "Resolved",
+      closed: "Closed",
+      idle: "Idle",
+      requested: "Requested",
+      otp_verified: "OTP Verified",
+      completed: "Completed",
+      rejected: "Rejected",
+      active: "Active",
+      pending_approval: "Pending Approval",
+      pending: "Pending",
+      disabled: "Disabled",
+    };
+  return map[value] ?? value;
+}
+
 export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; roleGroup: RoleGroup }) {
   const text = TEXT[locale];
-  const [isNavigating, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<MenuTab>("dashboard");
 
   const [stats, setStats] = useState<StatsPayload | null>(null);
@@ -189,11 +250,14 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
 
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [insight, setInsight] = useState<UserInsight | null>(null);
+
+  const pushToast = useCallback((kind: ToastKind, message: string) => {
+    setToast({ id: Date.now(), kind, message });
+  }, []);
 
   const tabs = useMemo(() => {
     if (roleGroup === "it") {
@@ -215,21 +279,18 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
   const fetchJson = useCallback(async (url: string, init?: RequestInit) => {
     const response = await fetch(url, { credentials: "include", cache: "no-store", ...(init ?? {}) });
     if (response.status === 401 || response.status === 403) {
-      startTransition(() => {
-        window.location.href = "/login?timeout=1";
-      });
-      throw new Error("Unauthorized");
+      window.location.href = "/login?timeout=1";
+      throw new Error(UNAUTHORIZED_ERROR);
     }
     const body = (await response.json().catch(() => null)) as unknown;
     if (!response.ok) {
-      throw new Error(normalizeApiError(body, "Request failed"));
+      throw new Error(normalizeApiError(body, localized(locale, "ไม่สามารถทำรายการได้", "Request failed")));
     }
     return body;
-  }, [startTransition]);
+  }, [locale]);
 
   const loadCurrentMenu = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       if (activeTab === "dashboard") {
         setStats((await fetchJson("/api/admin/stats")) as StatsPayload);
@@ -262,12 +323,12 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
         setRecovery(payload.rows ?? []);
       }
     } catch (err) {
-      if (err instanceof Error && err.message === "Unauthorized") return;
-      setError(err instanceof Error ? err.message : "Unable to load data");
+      if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "โหลดข้อมูลไม่สำเร็จ", "Unable to load data"));
     } finally {
       setLoading(false);
     }
-  }, [activeTab, fetchJson]);
+  }, [activeTab, fetchJson, locale, pushToast]);
 
   useEffect(() => {
     const applyHash = () => {
@@ -283,6 +344,22 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
     void loadCurrentMenu();
   }, [loadCurrentMenu]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 4200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    const onRefreshMenu = () => {
+      void loadCurrentMenu();
+    };
+    window.addEventListener("support:refresh-current-menu", onRefreshMenu);
+    return () => window.removeEventListener("support:refresh-current-menu", onRefreshMenu);
+  }, [loadCurrentMenu]);
+
   const filteredUsers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return users;
@@ -295,59 +372,70 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
     try {
       setInsight((await fetchJson(`/api/admin/support-user-insights?userId=${user.id}`)) as UserInsight);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load user details");
+      if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "โหลดข้อมูลผู้ใช้ไม่สำเร็จ", "Unable to load user details"));
     }
   }
 
   async function updateTicket(ticketId: string, action: "in_progress" | "resolved" | "cancel") {
-    setMessage(null);
-    const body = await fetchJson("/api/admin/support-tickets", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ticketId, action }),
-    });
-    setMessage((body as { message?: string }).message ?? "Ticket updated");
-    void loadCurrentMenu();
+    try {
+      const body = await fetchJson("/api/admin/support-tickets", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ticketId, action }),
+      });
+      pushToast("success", (body as { message?: string }).message ?? localized(locale, "อัปเดตคำร้องแล้ว", "Ticket updated"));
+      void loadCurrentMenu();
+    } catch (err) {
+      if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "อัปเดตคำร้องไม่สำเร็จ", "Ticket update failed"));
+    }
   }
 
   async function updateBilling(user: BillingRow, renew = false) {
-    setMessage(null);
-    const draft = billingDrafts[user.userId];
-    const body = await fetchJson("/api/admin/support-billing", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        userId: user.userId,
-        packageType: draft?.packageType ?? user.packageType,
-        paymentStatus: draft?.paymentStatus ?? user.paymentStatus,
-        amount: draft?.amount ? Number(draft.amount) : user.amount,
-        expiresAt: draft?.expiresAt ?? user.expiresAt,
-        renew,
-      }),
-    });
-    setMessage((body as { message?: string }).message ?? "Billing updated");
-    void loadCurrentMenu();
+    try {
+      const draft = billingDrafts[user.userId];
+      const body = await fetchJson("/api/admin/support-billing", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          userId: user.userId,
+          packageType: draft?.packageType ?? user.packageType,
+          paymentStatus: draft?.paymentStatus ?? user.paymentStatus,
+          amount: draft?.amount ? Number(draft.amount) : user.amount,
+          expiresAt: draft?.expiresAt ?? user.expiresAt,
+          renew,
+        }),
+      });
+      pushToast("success", (body as { message?: string }).message ?? localized(locale, "อัปเดตการชำระเงินแล้ว", "Billing updated"));
+      void loadCurrentMenu();
+    } catch (err) {
+      if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "อัปเดตการชำระเงินไม่สำเร็จ", "Billing update failed"));
+    }
   }
 
   async function runRecovery(userId: string, action: "request" | "verify_otp" | "complete" | "reject" | "cancel_delete") {
-    setMessage(null);
-    const otpCode = action === "verify_otp" ? window.prompt(locale === "th" ? "กรอกรหัส OTP 6 หลัก" : "Enter 6-digit OTP") ?? "" : undefined;
-    const body = await fetchJson("/api/admin/support-recovery", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ userId, action, otpCode }),
-    });
-    const payload = body as { message?: string; timestamp?: string };
-    setMessage(`${payload.message ?? "Recovery updated"} ${formatDate(payload.timestamp ?? null, locale)}`);
-    void loadCurrentMenu();
-  }
-
-  async function logout() {
-    const supabase = createBrowserSupabase();
-    await supabase.auth.signOut({ scope: "local" });
-    startTransition(() => {
-      window.location.href = "/login?logout=1";
-    });
+    try {
+      const otpCode = action === "verify_otp" ? window.prompt(localized(locale, "\u0E01\u0E23\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A OTP 6 \u0E2B\u0E25\u0E31\u0E01", "Enter 6-digit OTP")) ?? "" : undefined;
+      const body = await fetchJson("/api/admin/support-recovery", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userId, action, otpCode }),
+      });
+      const payload = body as { message?: string; timestamp?: string };
+      const completedAt = payload.timestamp
+        ? `${localized(locale, "\u0E40\u0E27\u0E25\u0E32", "at")} ${formatDate(payload.timestamp, locale)}`
+        : "";
+      pushToast(
+        "success",
+        `${payload.message ?? localized(locale, "\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E01\u0E23\u0E30\u0E1A\u0E27\u0E19\u0E01\u0E32\u0E23\u0E01\u0E39\u0E49\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E41\u0E25\u0E49\u0E27", "Recovery updated")}${completedAt ? ` | ${completedAt}` : ""}`,
+      );
+      void loadCurrentMenu();
+    } catch (err) {
+      if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E01\u0E23\u0E30\u0E1A\u0E27\u0E19\u0E01\u0E32\u0E23\u0E01\u0E39\u0E49\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08", "Recovery update failed"));
+    }
   }
 
   return (
@@ -359,31 +447,32 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
       <div className="workspace-anchor" id="workspace-recovery" />
 
       <section className="panel workspace-tabs-panel mt-4">
-        <div className="workspace-head">
-          <div className="workspace-tabs">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                className={`workspace-tab ${activeTab === tab.id ? "workspace-tab-active" : ""}`}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  window.location.hash = TAB_TO_HASH[tab.id];
-                }}
-                type="button"
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button className="ghost-button" disabled={loading} onClick={() => void loadCurrentMenu()} type="button">{text.refresh}</button>
-            <button className="danger-button" disabled={isNavigating} onClick={() => void logout()} type="button">{text.signOut}</button>
-          </div>
+        <div className="workspace-tabs">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`workspace-tab ${activeTab === tab.id ? "workspace-tab-active" : ""}`}
+              onClick={() => {
+                setActiveTab(tab.id);
+                window.location.hash = TAB_TO_HASH[tab.id];
+              }}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </section>
 
-      {error ? <p className="error-banner mt-4 text-sm">{error}</p> : null}
-      {message ? <p className="success-banner mt-4 text-sm">{message}</p> : null}
+      {toast ? (
+        <div className="toast-stack" aria-atomic="true" aria-live="polite">
+          <article className={`toast-card toast-${toast.kind}`} role="status">
+            <span className="toast-icon" aria-hidden>{toast.kind === "success" ? "\u2713" : "!"}</span>
+            <p className="toast-message">{toast.message}</p>
+            <button className="toast-close" onClick={() => setToast(null)} type="button">{text.close}</button>
+          </article>
+        </div>
+      ) : null}
 
       {loading ? <p className="panel mt-4 text-sm muted">{text.loading}</p> : null}
 
@@ -391,10 +480,10 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
         <section className="panel mt-4">
           <h3 className="text-base font-semibold">{text.dashboard}</h3>
           <div className="metric-grid mt-4">
-            <article className="metric-card"><h4>Total Users</h4><p>{stats?.totalUsers ?? 0}</p></article>
-            <article className="metric-card"><h4>Active Users</h4><p>{stats?.activeUsers ?? 0}</p></article>
-            <article className="metric-card"><h4>Pending Approvals</h4><p>{stats?.pendingApprovals ?? 0}</p></article>
-            <article className="metric-card"><h4>Reviewed 24h</h4><p>{stats?.reviewedApprovals24h ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "ผู้ใช้งานทั้งหมด", "Total Users")}</h4><p>{stats?.totalUsers ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "ผู้ใช้งานที่ยังใช้งาน", "Active Users")}</h4><p>{stats?.activeUsers ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "รออนุมัติ", "Pending Approvals")}</h4><p>{stats?.pendingApprovals ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "อนุมัติใน 24 ชม.", "Reviewed 24h")}</h4><p>{stats?.reviewedApprovals24h ?? 0}</p></article>
           </div>
         </section>
       ) : null}
@@ -407,13 +496,13 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
           </div>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>User</th><th>Signup</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "วันที่สมัคร", "Signup")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
               <tbody>
                 {filteredUsers.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : filteredUsers.map((user, idx) => (
                   <tr key={user.id}>
                     <td>{idx + 1}</td><td><p className="font-semibold">{user.full_name || "-"}</p><p className="text-xs muted">{user.email || "-"}</p></td>
                     <td>{formatDate(user.created_at, locale)}</td>
-                    <td><span className={`status-pill status-${user.status}`}>{user.status}</span></td>
+                    <td><span className={`status-pill status-${user.status}`}>{formatStatusLabel(locale, user.status)}</span></td>
                     <td><button className="ghost-button compact-button" onClick={() => void openUserInsight(user)} type="button">{text.details}</button></td>
                   </tr>
                 ))}
@@ -428,13 +517,13 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
           <h3 className="text-base font-semibold">{text.tickets}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>User</th><th>Issue</th><th>Status</th><th>Action</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "หัวข้อปัญหา", "Issue")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
               <tbody>
                 {tickets.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : tickets.map((ticket, idx) => (
                   <tr key={ticket.id}>
                     <td>{idx + 1}</td><td><p className="font-semibold">{ticket.userName}</p><p className="text-xs muted">{ticket.userEmail}</p></td>
                     <td><p className="font-semibold">{ticket.subject}</p><p className="text-xs muted">{ticket.message}</p></td>
-                    <td><span className={`status-pill status-${ticket.status}`}>{ticket.status}</span></td>
+                    <td><span className={`status-pill status-${ticket.status}`}>{formatStatusLabel(locale, ticket.status)}</span></td>
                     <td><div className="flex flex-wrap gap-2">
                       <button className="ghost-button compact-button" onClick={() => void updateTicket(ticket.id, "in_progress")} type="button">{text.inProgress}</button>
                       <button className="ghost-button compact-button" onClick={() => void updateTicket(ticket.id, "resolved")} type="button">{text.resolved}</button>
@@ -453,7 +542,7 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
           <h3 className="text-base font-semibold">{text.billing}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>User</th><th>Package</th><th>Status</th><th>Amount</th><th>Expires</th><th>Action</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "แพ็กเกจ", "Package")}</th><th>{localized(locale, "สถานะชำระเงิน", "Payment Status")}</th><th>{localized(locale, "ยอดเงิน", "Amount")}</th><th>{localized(locale, "วันหมดอายุ", "Expires")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
               <tbody>
                 {billing.length === 0 ? <tr><td colSpan={7} className="muted">{text.noData}</td></tr> : billing.map((row, idx) => (
                   <tr key={row.userId}>
@@ -477,9 +566,9 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
                         }
                         value={billingDrafts[row.userId]?.packageType ?? row.packageType}
                       >
-                        <option value="free">free</option>
-                        <option value="monthly">monthly</option>
-                        <option value="annual">annual</option>
+                        <option value="free">{formatPackageLabel(locale, "free")}</option>
+                        <option value="monthly">{formatPackageLabel(locale, "monthly")}</option>
+                        <option value="annual">{formatPackageLabel(locale, "annual")}</option>
                       </select>
                     </td>
                     <td>
@@ -501,10 +590,10 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
                         }
                         value={billingDrafts[row.userId]?.paymentStatus ?? row.paymentStatus}
                       >
-                        <option value="paid">paid</option>
-                        <option value="failed">failed</option>
-                        <option value="pending">pending</option>
-                        <option value="overdue">overdue</option>
+                        <option value="paid">{formatPaymentLabel(locale, "paid")}</option>
+                        <option value="failed">{formatPaymentLabel(locale, "failed")}</option>
+                        <option value="pending">{formatPaymentLabel(locale, "pending")}</option>
+                        <option value="overdue">{formatPaymentLabel(locale, "overdue")}</option>
                       </select>
                     </td>
                     <td>
@@ -563,12 +652,12 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
           <h3 className="text-base font-semibold">{text.recovery}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>User</th><th>Status</th><th>Last Action</th><th>Action</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "อัปเดตล่าสุด", "Last Action")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
               <tbody>
                 {recovery.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : recovery.map((row, idx) => (
                   <tr key={row.userId}>
                     <td>{idx + 1}</td><td><p className="font-semibold">{row.userName}</p><p className="text-xs muted">{row.userEmail}</p></td>
-                    <td><span className={`status-pill status-${row.status}`}>{row.status}</span></td><td>{formatDate(row.lastActionAt, locale)}</td>
+                    <td><span className={`status-pill status-${row.status}`}>{formatStatusLabel(locale, row.status)}</span></td><td>{formatDate(row.lastActionAt, locale)}</td>
                     <td><div className="flex flex-wrap gap-2">
                       <button className="ghost-button compact-button" onClick={() => void runRecovery(row.userId, "request")} type="button">{text.recoveryRequest}</button>
                       <button className="ghost-button compact-button" onClick={() => void runRecovery(row.userId, "verify_otp")} type="button">{text.recoveryOtp}</button>
@@ -594,12 +683,12 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
             {insight ? (
               <>
                 <div className="metric-grid mt-4">
-                  <article className="metric-card"><h4>Package</h4><p className="text-xl">{insight.plan.packageType}</p></article>
-                  <article className="metric-card"><h4>Payment</h4><p className="text-xl">{insight.plan.paymentStatus}</p></article>
-                  <article className="metric-card"><h4>Items</h4><p className="text-xl">{insight.usage.vaultItemsCount}</p></article>
-                  <article className="metric-card"><h4>Copy</h4><p className="text-xl">{insight.usage.copyActionCount}</p></article>
-                  <article className="metric-card"><h4>PIN Issues</h4><p className="text-xl">{insight.usage.pinIssueCount}</p></article>
-                  <article className="metric-card"><h4>UI Issues</h4><p className="text-xl">{insight.usage.uiIssueCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "แพ็กเกจ", "Package")}</h4><p className="text-xl">{formatPackageLabel(locale, insight.plan.packageType)}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "การชำระเงิน", "Payment")}</h4><p className="text-xl">{formatPaymentLabel(locale, insight.plan.paymentStatus)}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "จำนวนรายการ", "Items")}</h4><p className="text-xl">{insight.usage.vaultItemsCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "การคัดลอก", "Copy")}</h4><p className="text-xl">{insight.usage.copyActionCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "ปัญหา PIN", "PIN Issues")}</h4><p className="text-xl">{insight.usage.pinIssueCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "ปัญหา UI", "UI Issues")}</h4><p className="text-xl">{insight.usage.uiIssueCount}</p></article>
                 </div>
               </>
             ) : <p className="mt-4 text-sm muted">{text.loading}</p>}
