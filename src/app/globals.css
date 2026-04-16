@@ -37,15 +37,14 @@ a {
 }
 
 .office-shell {
-  width: min(1280px, calc(100vw - 56px));
-  margin: 28px auto;
-  border: 1px solid var(--line-soft);
-  border-radius: 24px;
-  background: rgba(248, 251, 255, 0.85);
-  box-shadow:
-    0 24px 60px rgba(23, 48, 76, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
+  width: 100%;
+  margin: 0;
+  min-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .support-shell {
@@ -1122,8 +1121,8 @@ a {
 
 @media (max-width: 1024px) {
   .office-shell {
-    width: calc(100vw - 28px);
-    margin: 14px auto;
+    width: 100%;
+    margin: 0;
   }
 
   .support-shell {
