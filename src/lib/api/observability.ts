@@ -26,10 +26,22 @@ export function logApiError(
   error: unknown,
   metadata?: Record<string, unknown>,
 ) {
-  const normalizedError =
-    error instanceof Error
-      ? { name: error.name, message: error.message, stack: error.stack }
-      : { message: String(error) };
+  let normalizedError: Record<string, unknown>;
+  if (error instanceof Error) {
+    normalizedError = { name: error.name, message: error.message, stack: error.stack };
+  } else if (error && typeof error === "object") {
+    const source = error as Record<string, unknown>;
+    normalizedError = {
+      message: typeof source.message === "string" ? source.message : "Non-Error exception",
+      ...(typeof source.name === "string" ? { name: source.name } : {}),
+      ...(typeof source.code === "string" ? { code: source.code } : {}),
+      ...(typeof source.details === "string" ? { details: source.details } : {}),
+      ...(typeof source.hint === "string" ? { hint: source.hint } : {}),
+      ...(typeof source.stack === "string" ? { stack: source.stack } : {}),
+    };
+  } else {
+    normalizedError = { message: String(error) };
+  }
 
   console.error(
     JSON.stringify({

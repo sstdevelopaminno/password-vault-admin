@@ -27,6 +27,13 @@ type LocalRateLimitWindowState = {
   timestampsMs: number[];
 };
 
+type ErrorMetadata = {
+  message?: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+};
+
 const blockedIpCache = new Map<string, RateLimitBlockState>();
 const localRateWindowByIp = new Map<string, LocalRateLimitWindowState>();
 
@@ -78,6 +85,55 @@ async function parseBody(request: Request) {
   }
 
   return requestSchema.parse(JSON.parse(raw));
+}
+
+function extractErrorMetadata(error: unknown): ErrorMetadata {
+  if (!error || typeof error !== "object") {
+    return {};
+  }
+
+  const source = error as Record<string, unknown>;
+  return {
+    message: typeof source.message === "string" ? source.message : undefined,
+    details: typeof source.details === "string" ? source.details : undefined,
+    hint: typeof source.hint === "string" ? source.hint : undefined,
+    code: typeof source.code === "string" ? source.code : undefined,
+  };
+}
+
+function toError(error: unknown, fallbackMessage: string): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  const metadata = extractErrorMetadata(error);
+  return new Error(metadata.message ?? fallbackMessage);
+}
+
+function isQrBackendUnavailableError(error: unknown): boolean {
+  const metadata = extractErrorMetadata(error);
+  const code = metadata.code?.toUpperCase();
+
+  if (code && ["PGRST000", "PGRST002", "PGRST003", "PGRST202", "42883", "42P01", "57P03"].includes(code)) {
+    return true;
+  }
+
+  const text = [metadata.message, metadata.details, metadata.hint]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
+
+  return [
+    "fetch failed",
+    "network",
+    "timeout",
+    "timed out",
+    "econn",
+    "eacces",
+    "enotfound",
+    "eai_again",
+    "connection refused",
+  ].some((needle) => text.includes(needle));
 }
 
 export async function POST(request: Request) {
@@ -177,7 +233,21 @@ export async function POST(request: Request) {
     );
 
     if (createError || !created) {
-      throw createError ?? new Error("Unable to create challenge");
+      const failure = createError ?? new Error("Unable to create challenge");
+      if (isQrBackendUnavailableError(failure)) {
+        logApiError(ctx, 503, failure, {
+          route: ROUTE,
+          reason: "qr_backend_unavailable",
+          timingsMs,
+          error: extractErrorMetadata(failure),
+        });
+        return jsonError(ctx, "QR login backend is temporarily unavailable", {
+          status: 503,
+          code: "qr_backend_unavailable",
+        });
+      }
+
+      throw toError(failure, "Unable to create challenge");
     }
 
     if (created.rate_limited) {
@@ -264,6 +334,19 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) {
       return jsonError(ctx, "Invalid request payload", { status: 400 });
+    }
+
+    if (isQrBackendUnavailableError(error)) {
+      logApiError(ctx, 503, error, {
+        route: ROUTE,
+        reason: "qr_backend_unavailable",
+        timingsMs,
+        error: extractErrorMetadata(error),
+      });
+      return jsonError(ctx, "QR login backend is temporarily unavailable", {
+        status: 503,
+        code: "qr_backend_unavailable",
+      });
     }
 
     logApiError(ctx, 500, error, { route: ROUTE, timingsMs });
