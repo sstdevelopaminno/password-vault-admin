@@ -239,24 +239,33 @@ export default async function HomePage() {
     <>
       <main className="office-shell support-shell p-4 md:p-5">
         <aside className="support-sidebar">
-          <div>
+          <div className="support-sidebar-top">
             <div className="support-brand-block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img alt="Password Vault Logo" className="support-brand-logo" src={SUPPORT_BRAND_LOGO_URL} />
               <div>
                 <p className="support-brand-company">Password Vault</p>
                 <p className="support-brand-system">{labels.brandSystem}</p>
+                <p className="support-role-pill">{roleDisplayText(locale, roleGroup, profile.role)}</p>
               </div>
             </div>
 
-            <p className="support-role-pill">{roleDisplayText(locale, roleGroup, profile.role)}</p>
-
-            <nav className="support-nav-list mt-4" aria-label="Support menu">
-              {visibleMenuItems.map((menu) => (
-                <a key={menu.id} className="support-nav-item support-nav-link" href={menu.href}>
-                  <p className="support-nav-id">{locale === "th" ? "เมนู" : "Menu"} {menu.id}</p>
-                  <h2 className="support-nav-title">{menu.title}</h2>
-                  <p className="support-nav-desc">{menu.desc}</p>
+            <nav className="support-nav-list mt-5" aria-label="Support menu">
+              <p className="support-nav-heading">{locale === "th" ? "เมนู" : "Menu"}</p>
+              {visibleMenuItems.map((menu, index) => (
+                <a
+                  key={menu.id}
+                  className={`support-nav-item support-nav-link ${index === 0 ? "support-nav-item-active" : ""}`}
+                  href={menu.href}
+                  title={menu.desc}
+                >
+                  <span aria-hidden className="support-nav-index">
+                    {menu.id}
+                  </span>
+                  <span className="support-nav-content">
+                    <span className="support-nav-title">{menu.title}</span>
+                    <span className="support-nav-desc">{menu.desc}</span>
+                  </span>
                 </a>
               ))}
             </nav>
@@ -270,38 +279,48 @@ export default async function HomePage() {
 
         <section className="support-main">
           <header className="panel support-hero" id="support-top">
-            <span className="badge">Helpdesk Backoffice</span>
+            <div className="support-hero-top">
+              <span className="badge">Helpdesk Backoffice</span>
+              <span className="support-hero-role">{roleDisplayText(locale, roleGroup, profile.role)}</span>
+            </div>
             <h1 className="mt-3 text-3xl font-extrabold tracking-tight">{t(locale, "appTitle")}</h1>
             <p className="mt-2 max-w-4xl text-sm md:text-[15px] muted">{t(locale, "appSubtitle")}</p>
           </header>
 
-          {showSupportScope ? (
-            <section className="panel mt-4" id="support-scope">
-              <h3 className="text-base font-semibold">{labels.supportScopeTitle}</h3>
-              <p className="mt-2 text-sm muted">{labels.supportScopeDesc}</p>
-              <div className="support-scope-list mt-3">
-                {SUPPORT_SCOPE_ITEMS[locale].map((scope) => (
-                  <article key={scope} className="support-scope-item">
-                    {scope}
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
+          <section className="panel mt-4 support-scope-panel">
+            <h3 className="text-base font-semibold">{labels.workflowRuleTitle}</h3>
+            <p className="mt-2 text-sm muted">{labels.workflowRuleDesc}</p>
 
-          {showItScope ? (
-            <section className="panel mt-4" id="support-escalation">
-              <h3 className="text-base font-semibold">{labels.itScopeTitle}</h3>
-              <p className="mt-2 text-sm muted">{labels.itScopeDesc}</p>
-              <div className="support-scope-list mt-3">
-                {IT_SCOPE_ITEMS[locale].map((scope) => (
-                  <article key={scope} className="support-scope-item">
-                    {scope}
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
+            <div className="support-scope-accordion mt-4">
+              {showSupportScope ? (
+                <details className="support-scope-details" id="support-scope" open>
+                  <summary>
+                    <span>{labels.supportScopeTitle}</span>
+                    <small>{labels.supportScopeDesc}</small>
+                  </summary>
+                  <ul>
+                    {SUPPORT_SCOPE_ITEMS[locale].map((scope) => (
+                      <li key={scope}>{scope}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+
+              {showItScope ? (
+                <details className="support-scope-details" id="support-escalation">
+                  <summary>
+                    <span>{labels.itScopeTitle}</span>
+                    <small>{labels.itScopeDesc}</small>
+                  </summary>
+                  <ul>
+                    {IT_SCOPE_ITEMS[locale].map((scope) => (
+                      <li key={scope}>{scope}</li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
+            </div>
+          </section>
 
           <DashboardLivePanels locale={locale} />
 
