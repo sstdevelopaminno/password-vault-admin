@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type UiLocale = "th" | "en";
-type MenuTab = "dashboard" | "users" | "tickets" | "billing" | "recovery";
+type MenuTab = "dashboard" | "users" | "uiCheck" | "tickets" | "billing" | "recovery";
 
 type StatsPayload = {
   totalUsers: number;
@@ -99,6 +99,7 @@ type UserInsight = {
 const HASH_TO_TAB: Record<string, MenuTab> = {
   "#workspace-dashboard": "dashboard",
   "#workspace-users-general": "users",
+  "#workspace-ui-check": "uiCheck",
   "#workspace-tickets": "tickets",
   "#workspace-billing": "billing",
   "#workspace-recovery": "recovery",
@@ -110,9 +111,16 @@ const TEXT = {
   th: {
     dashboard: "แดชบอร์ด",
     users: "เช็ครายชื่อผู้ใช้งานทั่วไป",
+    uiCheck: "เช็ค UI",
     tickets: "คำร้องจากศูนย์ช่วยเหลือ",
     billing: "ตรวจสอบยอดชำระเงิน",
     recovery: "กู้คืนข้อมูลผู้ใช้งาน",
+    uiCheckSearch: "ค้นหาด้วยชื่อหรืออีเมล...",
+    uiCheckOpen: "เข้าเช็ค UI",
+    uiCheckPreview: "พรีวิวหน้าจอผู้ใช้งาน",
+    uiCheckMasked: "โหมดทดสอบ UI: ซ่อนข้อมูลส่วนตัวของผู้ใช้งานทั้งหมด",
+    uiCheckSelectUser: "เลือกผู้ใช้งานจากรายการด้านซ้าย เพื่อเริ่มตรวจหน้าตาระบบ",
+    uiCheckLogged: "บันทึกการเช็ค UI เรียบร้อยแล้ว",
     refresh: "รีเฟรช",
     loading: "กำลังโหลดข้อมูล...",
     noData: "ไม่พบข้อมูล",
@@ -134,9 +142,16 @@ const TEXT = {
   en: {
     dashboard: "Dashboard",
     users: "General Users",
+    uiCheck: "UI Check",
     tickets: "Help Center Tickets",
     billing: "Billing Monitor",
     recovery: "Data Recovery",
+    uiCheckSearch: "Search by name or email...",
+    uiCheckOpen: "Open UI Check",
+    uiCheckPreview: "General User UI Preview",
+    uiCheckMasked: "UI testing mode: all personal data is hidden.",
+    uiCheckSelectUser: "Pick a user from the list to start UI inspection.",
+    uiCheckLogged: "UI check activity logged successfully.",
     refresh: "Refresh",
     loading: "Loading...",
     noData: "No data found",
@@ -156,7 +171,6 @@ const TEXT = {
     signOut: "Sign Out",
   },
 };
-
 function formatDate(value: string | null, locale: UiLocale) {
   if (!value) return "-";
   const date = new Date(value);
@@ -181,14 +195,14 @@ function localized(locale: UiLocale, th: string, en: string) {
 
 function formatPackageLabel(locale: UiLocale, value: string) {
   const map: Record<string, string> = locale === "th"
-    ? { free: "ฟรี", monthly: "รายเดือน", annual: "รายปี" }
+    ? { free: "เธเธฃเธต", monthly: "เธฃเธฒเธขเน€เธ”เธทเธญเธ", annual: "เธฃเธฒเธขเธเธต" }
     : { free: "Free", monthly: "Monthly", annual: "Annual" };
   return map[value] ?? value;
 }
 
 function formatPaymentLabel(locale: UiLocale, value: string) {
   const map: Record<string, string> = locale === "th"
-    ? { paid: "ชำระสำเร็จ", failed: "ชำระไม่สำเร็จ", pending: "รอดำเนินการ", overdue: "ค้างชำระ" }
+    ? { paid: "เธเธณเธฃเธฐเธชเธณเน€เธฃเนเธ", failed: "เธเธณเธฃเธฐเนเธกเนเธชเธณเน€เธฃเนเธ", pending: "เธฃเธญเธ”เธณเน€เธเธดเธเธเธฒเธฃ", overdue: "เธเนเธฒเธเธเธณเธฃเธฐ" }
     : { paid: "Paid", failed: "Failed", pending: "Pending", overdue: "Overdue" };
   return map[value] ?? value;
 }
@@ -196,19 +210,19 @@ function formatPaymentLabel(locale: UiLocale, value: string) {
 function formatStatusLabel(locale: UiLocale, value: string) {
   const map: Record<string, string> = locale === "th"
     ? {
-      open: "เปิดรายการ",
-      in_progress: "กำลังดำเนินการ",
-      resolved: "เสร็จสิ้น",
-      closed: "ปิดรายการ",
-      idle: "รอคำขอ",
-      requested: "ส่งคำขอแล้ว",
-      otp_verified: "ยืนยัน OTP แล้ว",
-      completed: "กู้คืนสำเร็จ",
-      rejected: "ปฏิเสธ",
-      active: "ใช้งาน",
-      pending_approval: "รออนุมัติ",
-      pending: "รอดำเนินการ",
-      disabled: "ปิดใช้งาน",
+      open: "เน€เธเธดเธ”เธฃเธฒเธขเธเธฒเธฃ",
+      in_progress: "เธเธณเธฅเธฑเธเธ”เธณเน€เธเธดเธเธเธฒเธฃ",
+      resolved: "เน€เธชเธฃเนเธเธชเธดเนเธ",
+      closed: "เธเธดเธ”เธฃเธฒเธขเธเธฒเธฃ",
+      idle: "เธฃเธญเธเธณเธเธญ",
+      requested: "เธชเนเธเธเธณเธเธญเนเธฅเนเธง",
+      otp_verified: "เธขเธทเธเธขเธฑเธ OTP เนเธฅเนเธง",
+      completed: "เธเธนเนเธเธทเธเธชเธณเน€เธฃเนเธ",
+      rejected: "เธเธเธดเน€เธชเธ",
+      active: "เนเธเนเธเธฒเธ",
+      pending_approval: "เธฃเธญเธญเธเธธเธกเธฑเธ•เธด",
+      pending: "เธฃเธญเธ”เธณเน€เธเธดเธเธเธฒเธฃ",
+      disabled: "เธเธดเธ”เนเธเนเธเธฒเธ",
     }
     : {
       open: "Open",
@@ -238,13 +252,17 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
   const [billing, setBilling] = useState<BillingRow[]>([]);
   const [billingDrafts, setBillingDrafts] = useState<Record<string, BillingDraft>>({});
   const [recovery, setRecovery] = useState<RecoveryRow[]>([]);
+  const [uiCheckUsers, setUiCheckUsers] = useState<UserRow[]>([]);
 
   const [search, setSearch] = useState("");
+  const [uiCheckSearch, setUiCheckSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [insight, setInsight] = useState<UserInsight | null>(null);
+  const [uiCheckUser, setUiCheckUser] = useState<UserRow | null>(null);
+  const [uiCheckView, setUiCheckView] = useState<"home" | "vault" | "notes" | "share" | "settings" | "help">("home");
 
   const pushToast = useCallback((kind: ToastKind, message: string) => {
     setToast({ id: Date.now(), kind, message });
@@ -258,7 +276,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
     }
     const body = (await response.json().catch(() => null)) as unknown;
     if (!response.ok) {
-      throw new Error(normalizeApiError(body, localized(locale, "ไม่สามารถทำรายการได้", "Request failed")));
+      throw new Error(normalizeApiError(body, localized(locale, "เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธ—เธณเธฃเธฒเธขเธเธฒเธฃเนเธ”เน", "Request failed")));
     }
     return body;
   }, [locale]);
@@ -272,6 +290,10 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
       if (activeTab === "users") {
         const payload = (await fetchJson("/api/admin/users?limit=50&accountType=general")) as { users: UserRow[] };
         setUsers(payload.users ?? []);
+      }
+      if (activeTab === "uiCheck") {
+        const payload = (await fetchJson("/api/admin/support-ui-check?limit=150")) as { users: UserRow[] };
+        setUiCheckUsers(payload.users ?? []);
       }
       if (activeTab === "tickets") {
         const payload = (await fetchJson("/api/admin/support-tickets")) as { tickets: SupportTicketRow[] };
@@ -298,7 +320,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
       }
     } catch (err) {
       if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
-      pushToast("error", err instanceof Error ? err.message : localized(locale, "โหลดข้อมูลไม่สำเร็จ", "Unable to load data"));
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "เนเธซเธฅเธ”เธเนเธญเธกเธนเธฅเนเธกเนเธชเธณเน€เธฃเนเธ", "Unable to load data"));
     } finally {
       setLoading(false);
     }
@@ -340,6 +362,24 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
     return users.filter((user) => [user.full_name ?? "", user.email ?? ""].join(" ").toLowerCase().includes(keyword));
   }, [search, users]);
 
+  const filteredUiCheckUsers = useMemo(() => {
+    const keyword = uiCheckSearch.trim().toLowerCase();
+    if (!keyword) return uiCheckUsers;
+    return uiCheckUsers.filter((user) => [user.full_name ?? "", user.email ?? ""].join(" ").toLowerCase().includes(keyword));
+  }, [uiCheckSearch, uiCheckUsers]);
+
+  const uiCheckMenus = useMemo(
+    () => [
+      { id: "home" as const, label: localized(locale, "หน้าหลัก", "Home") },
+      { id: "vault" as const, label: localized(locale, "รหัสส่วนตัว", "Vault") },
+      { id: "notes" as const, label: localized(locale, "โน้ต", "Notes") },
+      { id: "share" as const, label: localized(locale, "รหัสทีม", "Team Share") },
+      { id: "help" as const, label: localized(locale, "ศูนย์ช่วยเหลือ", "Help Center") },
+      { id: "settings" as const, label: localized(locale, "ตั้งค่า", "Settings") },
+    ],
+    [locale],
+  );
+
   async function openUserInsight(user: UserRow) {
     setSelectedUser(user);
     setInsight(null);
@@ -347,7 +387,26 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
       setInsight((await fetchJson(`/api/admin/support-user-insights?userId=${user.id}`)) as UserInsight);
     } catch (err) {
       if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
-      pushToast("error", err instanceof Error ? err.message : localized(locale, "โหลดข้อมูลผู้ใช้ไม่สำเร็จ", "Unable to load user details"));
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "เนเธซเธฅเธ”เธเนเธญเธกเธนเธฅเธเธนเนเนเธเนเนเธกเนเธชเธณเน€เธฃเนเธ", "Unable to load user details"));
+    }
+  }
+
+  async function openUiCheck(user: UserRow) {
+    setUiCheckUser(user);
+    setUiCheckView("home");
+    try {
+      await fetchJson("/api/admin/support-ui-check", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          lookup: uiCheckSearch.trim() || user.email || user.full_name || "",
+        }),
+      });
+      pushToast("success", text.uiCheckLogged);
+    } catch (err) {
+      if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "ไม่สามารถเริ่มโหมดเช็ค UI ได้", "Unable to open UI check"));
     }
   }
 
@@ -358,11 +417,11 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ticketId, action }),
       });
-      pushToast("success", (body as { message?: string }).message ?? localized(locale, "อัปเดตคำร้องแล้ว", "Ticket updated"));
+      pushToast("success", (body as { message?: string }).message ?? localized(locale, "เธญเธฑเธเน€เธ”เธ•เธเธณเธฃเนเธญเธเนเธฅเนเธง", "Ticket updated"));
       void loadCurrentMenu();
     } catch (err) {
       if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
-      pushToast("error", err instanceof Error ? err.message : localized(locale, "อัปเดตคำร้องไม่สำเร็จ", "Ticket update failed"));
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "เธญเธฑเธเน€เธ”เธ•เธเธณเธฃเนเธญเธเนเธกเนเธชเธณเน€เธฃเนเธ", "Ticket update failed"));
     }
   }
 
@@ -381,11 +440,11 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           renew,
         }),
       });
-      pushToast("success", (body as { message?: string }).message ?? localized(locale, "อัปเดตการชำระเงินแล้ว", "Billing updated"));
+      pushToast("success", (body as { message?: string }).message ?? localized(locale, "เธญเธฑเธเน€เธ”เธ•เธเธฒเธฃเธเธณเธฃเธฐเน€เธเธดเธเนเธฅเนเธง", "Billing updated"));
       void loadCurrentMenu();
     } catch (err) {
       if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
-      pushToast("error", err instanceof Error ? err.message : localized(locale, "อัปเดตการชำระเงินไม่สำเร็จ", "Billing update failed"));
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "เธญเธฑเธเน€เธ”เธ•เธเธฒเธฃเธเธณเธฃเธฐเน€เธเธดเธเนเธกเนเธชเธณเน€เธฃเนเธ", "Billing update failed"));
     }
   }
 
@@ -416,6 +475,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
     <>
       <div className="workspace-anchor" id="workspace-dashboard" />
       <div className="workspace-anchor" id="workspace-users-general" />
+      <div className="workspace-anchor" id="workspace-ui-check" />
       <div className="workspace-anchor" id="workspace-tickets" />
       <div className="workspace-anchor" id="workspace-billing" />
       <div className="workspace-anchor" id="workspace-recovery" />
@@ -436,10 +496,10 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
         <section className="panel mt-4">
           <h3 className="text-base font-semibold">{text.dashboard}</h3>
           <div className="metric-grid mt-4">
-            <article className="metric-card"><h4>{localized(locale, "ผู้ใช้งานทั้งหมด", "Total Users")}</h4><p>{stats?.totalUsers ?? 0}</p></article>
-            <article className="metric-card"><h4>{localized(locale, "ผู้ใช้งานที่ยังใช้งาน", "Active Users")}</h4><p>{stats?.activeUsers ?? 0}</p></article>
-            <article className="metric-card"><h4>{localized(locale, "รออนุมัติ", "Pending Approvals")}</h4><p>{stats?.pendingApprovals ?? 0}</p></article>
-            <article className="metric-card"><h4>{localized(locale, "อนุมัติใน 24 ชม.", "Reviewed 24h")}</h4><p>{stats?.reviewedApprovals24h ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธเธ—เธฑเนเธเธซเธกเธ”", "Total Users")}</h4><p>{stats?.totalUsers ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธเธ—เธตเนเธขเธฑเธเนเธเนเธเธฒเธ", "Active Users")}</h4><p>{stats?.activeUsers ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "เธฃเธญเธญเธเธธเธกเธฑเธ•เธด", "Pending Approvals")}</h4><p>{stats?.pendingApprovals ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "เธญเธเธธเธกเธฑเธ•เธดเนเธ 24 เธเธก.", "Reviewed 24h")}</h4><p>{stats?.reviewedApprovals24h ?? 0}</p></article>
           </div>
         </section>
       ) : null}
@@ -452,7 +512,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           </div>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "วันที่สมัคร", "Signup")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธ", "User")}</th><th>{localized(locale, "เธงเธฑเธเธ—เธตเนเธชเธกเธฑเธเธฃ", "Signup")}</th><th>{localized(locale, "เธชเธ–เธฒเธเธฐ", "Status")}</th><th>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธเธฒเธฃ", "Action")}</th></tr></thead>
               <tbody>
                 {filteredUsers.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : filteredUsers.map((user, idx) => (
                   <tr key={user.id}>
@@ -468,12 +528,109 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
         </section>
       ) : null}
 
+      {!loading && activeTab === "uiCheck" ? (
+        <section className="panel mt-4">
+          <div className="ui-check-grid">
+            <article className="ui-check-list">
+              <div className="ui-check-head">
+                <h3 className="text-base font-semibold">{text.uiCheck}</h3>
+                <input
+                  className="admin-input compact-input"
+                  placeholder={text.uiCheckSearch}
+                  value={uiCheckSearch}
+                  onChange={(e) => setUiCheckSearch(e.target.value)}
+                />
+              </div>
+
+              <div className="ui-check-user-list mt-4">
+                {filteredUiCheckUsers.length === 0 ? (
+                  <p className="muted text-sm">{text.noData}</p>
+                ) : (
+                  filteredUiCheckUsers.map((user) => (
+                    <button
+                      key={user.id}
+                      className={`ui-check-user-item ${uiCheckUser?.id === user.id ? "ui-check-user-item-active" : ""}`}
+                      onClick={() => void openUiCheck(user)}
+                      type="button"
+                    >
+                      <span className="ui-check-user-main">
+                        <strong>{user.full_name || "-"}</strong>
+                        <small>{user.email || "-"}</small>
+                      </span>
+                      <span className="ui-check-user-meta">
+                        <small>{formatDate(user.created_at, locale)}</small>
+                        <span>{text.uiCheckOpen}</span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </article>
+
+            <article className="ui-check-preview">
+              <div className="ui-check-preview-head">
+                <h3 className="text-base font-semibold">{text.uiCheckPreview}</h3>
+                <span className="info-banner">{text.uiCheckMasked}</span>
+              </div>
+
+              {!uiCheckUser ? (
+                <p className="muted text-sm mt-4">{text.uiCheckSelectUser}</p>
+              ) : (
+                <>
+                  <div className="ui-check-preview-user">
+                    <strong>{uiCheckUser.full_name || "-"}</strong>
+                    <small>{uiCheckUser.email || "-"}</small>
+                  </div>
+
+                  <div className="ui-check-preview-nav">
+                    {uiCheckMenus.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`ui-check-preview-tab ${uiCheckView === item.id ? "ui-check-preview-tab-active" : ""}`}
+                        onClick={() => setUiCheckView(item.id)}
+                        type="button"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="ui-check-screen">
+                    <header className="ui-check-screen-head">
+                      <h4>
+                        {localized(locale, "โหมดตรวจสอบหน้าจอ", "UI Inspection Mode")} -{" "}
+                        {uiCheckMenus.find((item) => item.id === uiCheckView)?.label}
+                      </h4>
+                      <small>{localized(locale, "ไม่แสดงข้อมูลจริงของผู้ใช้", "No real user data is shown")}</small>
+                    </header>
+                    <div className="ui-check-screen-grid">
+                      <div className="ui-check-mock-card">
+                        <p>{localized(locale, "การ์ดตัวอย่าง 1", "Mock Card 1")}</p>
+                      </div>
+                      <div className="ui-check-mock-card">
+                        <p>{localized(locale, "การ์ดตัวอย่าง 2", "Mock Card 2")}</p>
+                      </div>
+                      <div className="ui-check-mock-card">
+                        <p>{localized(locale, "การ์ดตัวอย่าง 3", "Mock Card 3")}</p>
+                      </div>
+                      <div className="ui-check-mock-card">
+                        <p>{localized(locale, "การ์ดตัวอย่าง 4", "Mock Card 4")}</p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </article>
+          </div>
+        </section>
+      ) : null}
+
       {!loading && activeTab === "tickets" ? (
         <section className="panel mt-4">
           <h3 className="text-base font-semibold">{text.tickets}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "หัวข้อปัญหา", "Issue")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธ", "User")}</th><th>{localized(locale, "เธซเธฑเธงเธเนเธญเธเธฑเธเธซเธฒ", "Issue")}</th><th>{localized(locale, "เธชเธ–เธฒเธเธฐ", "Status")}</th><th>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธเธฒเธฃ", "Action")}</th></tr></thead>
               <tbody>
                 {tickets.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : tickets.map((ticket, idx) => (
                   <tr key={ticket.id}>
@@ -498,7 +655,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           <h3 className="text-base font-semibold">{text.billing}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "แพ็กเกจ", "Package")}</th><th>{localized(locale, "สถานะชำระเงิน", "Payment Status")}</th><th>{localized(locale, "ยอดเงิน", "Amount")}</th><th>{localized(locale, "วันหมดอายุ", "Expires")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธ", "User")}</th><th>{localized(locale, "เนเธเนเธเน€เธเธ", "Package")}</th><th>{localized(locale, "เธชเธ–เธฒเธเธฐเธเธณเธฃเธฐเน€เธเธดเธ", "Payment Status")}</th><th>{localized(locale, "เธขเธญเธ”เน€เธเธดเธ", "Amount")}</th><th>{localized(locale, "เธงเธฑเธเธซเธกเธ”เธญเธฒเธขเธธ", "Expires")}</th><th>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธเธฒเธฃ", "Action")}</th></tr></thead>
               <tbody>
                 {billing.length === 0 ? <tr><td colSpan={7} className="muted">{text.noData}</td></tr> : billing.map((row, idx) => (
                   <tr key={row.userId}>
@@ -608,7 +765,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           <h3 className="text-base font-semibold">{text.recovery}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "อัปเดตล่าสุด", "Last Action")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธ", "User")}</th><th>{localized(locale, "เธชเธ–เธฒเธเธฐ", "Status")}</th><th>{localized(locale, "เธญเธฑเธเน€เธ”เธ•เธฅเนเธฒเธชเธธเธ”", "Last Action")}</th><th>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธเธฒเธฃ", "Action")}</th></tr></thead>
               <tbody>
                 {recovery.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : recovery.map((row, idx) => (
                   <tr key={row.userId}>
@@ -639,12 +796,12 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
             {insight ? (
               <>
                 <div className="metric-grid mt-4">
-                  <article className="metric-card"><h4>{localized(locale, "แพ็กเกจ", "Package")}</h4><p className="text-xl">{formatPackageLabel(locale, insight.plan.packageType)}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "การชำระเงิน", "Payment")}</h4><p className="text-xl">{formatPaymentLabel(locale, insight.plan.paymentStatus)}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "จำนวนรายการ", "Items")}</h4><p className="text-xl">{insight.usage.vaultItemsCount}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "การคัดลอก", "Copy")}</h4><p className="text-xl">{insight.usage.copyActionCount}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "ปัญหา PIN", "PIN Issues")}</h4><p className="text-xl">{insight.usage.pinIssueCount}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "ปัญหา UI", "UI Issues")}</h4><p className="text-xl">{insight.usage.uiIssueCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "เนเธเนเธเน€เธเธ", "Package")}</h4><p className="text-xl">{formatPackageLabel(locale, insight.plan.packageType)}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "เธเธฒเธฃเธเธณเธฃเธฐเน€เธเธดเธ", "Payment")}</h4><p className="text-xl">{formatPaymentLabel(locale, insight.plan.paymentStatus)}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "เธเธณเธเธงเธเธฃเธฒเธขเธเธฒเธฃ", "Items")}</h4><p className="text-xl">{insight.usage.vaultItemsCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธฅเธญเธ", "Copy")}</h4><p className="text-xl">{insight.usage.copyActionCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "เธเธฑเธเธซเธฒ PIN", "PIN Issues")}</h4><p className="text-xl">{insight.usage.pinIssueCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "เธเธฑเธเธซเธฒ UI", "UI Issues")}</h4><p className="text-xl">{insight.usage.uiIssueCount}</p></article>
                 </div>
               </>
             ) : <p className="mt-4 text-sm muted">{text.loading}</p>}
@@ -654,3 +811,4 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
     </>
   );
 }
+

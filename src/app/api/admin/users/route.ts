@@ -17,6 +17,7 @@ const patchPayloadSchema = z.object({
 });
 
 const accountTypeSchema = z.enum(["general", "backoffice", "all"]).default("general");
+const BACKOFFICE_ROLES = new Set(["approver", "admin", "super_admin", "owner", "it", "it_admin"]);
 
 function parseLimit(raw: string | null, fallback = 50, max = 100) {
   const value = Number(raw ?? fallback);
@@ -39,7 +40,39 @@ function encodeCursor(value: { created_at: string; id: string }) {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
-async function proxyLegacyUsers(ctx: ReturnType<typeof createApiRequestContext>, request: Request, method: string) {
+function roleOfUser(user: unknown) {
+  if (!user || typeof user !== "object") return "";
+  const role = (user as { role?: unknown }).role;
+  return typeof role === "string" ? role.toLowerCase() : "";
+}
+
+function isUserInAccountType(user: unknown, accountType: z.infer<typeof accountTypeSchema>) {
+  if (accountType === "all") return true;
+  const role = roleOfUser(user);
+  if (!role) {
+    return accountType === "general";
+  }
+  if (accountType === "backoffice") {
+    return BACKOFFICE_ROLES.has(role);
+  }
+  return !BACKOFFICE_ROLES.has(role);
+}
+
+function filterUsersFromPayload(
+  body: Record<string, unknown>,
+  accountType: z.infer<typeof accountTypeSchema>,
+) {
+  const users = Array.isArray(body.users) ? body.users : null;
+  if (!users) return body;
+  return { ...body, users: users.filter((user) => isUserInAccountType(user, accountType)) };
+}
+
+async function proxyLegacyUsers(
+  ctx: ReturnType<typeof createApiRequestContext>,
+  request: Request,
+  method: string,
+  accountType: z.infer<typeof accountTypeSchema>,
+) {
   if (!env.LEGACY_PASSWORD_VAULT_API_BASE_URL) {
     return null;
   }
@@ -68,7 +101,8 @@ async function proxyLegacyUsers(ctx: ReturnType<typeof createApiRequestContext>,
       unknown
     >;
 
-    return jsonData(ctx, body, {
+    const filteredBody = method === "GET" ? filterUsersFromPayload(body, accountType) : body;
+    return jsonData(ctx, filteredBody, {
       status: response.status,
       headers: { "x-users-source": "legacy" },
     });
@@ -90,18 +124,18 @@ export async function GET(request: Request) {
       return guard.response;
     }
 
+    const url = new URL(request.url);
+    const limit = parseLimit(url.searchParams.get("limit"));
+    const cursor = decodeCursor(url.searchParams.get("cursor"));
+    const accountType = accountTypeSchema.parse(url.searchParams.get("accountType") ?? undefined);
+
     if (env.ADMIN_API_SOURCE === "legacy") {
-      const legacyResponse = await proxyLegacyUsers(ctx, request, "GET");
+      const legacyResponse = await proxyLegacyUsers(ctx, request, "GET", accountType);
       if (legacyResponse) {
         logApiSuccess(ctx, legacyResponse.status, { source: "legacy" });
         return legacyResponse;
       }
     }
-
-    const url = new URL(request.url);
-    const limit = parseLimit(url.searchParams.get("limit"));
-    const cursor = decodeCursor(url.searchParams.get("cursor"));
-    const accountType = accountTypeSchema.parse(url.searchParams.get("accountType") ?? undefined);
 
     const admin = createAdminClient();
     let query = admin
@@ -167,7 +201,7 @@ export async function PATCH(request: Request) {
     }
 
     if (env.ADMIN_API_SOURCE === "legacy") {
-      const legacyResponse = await proxyLegacyUsers(ctx, request, "PATCH");
+      const legacyResponse = await proxyLegacyUsers(ctx, request, "PATCH", "all");
       if (legacyResponse) {
         logApiSuccess(ctx, legacyResponse.status, { source: "legacy" });
         return legacyResponse;
@@ -223,7 +257,7 @@ export async function DELETE(request: Request) {
     }
 
     if (env.ADMIN_API_SOURCE === "legacy") {
-      const legacyResponse = await proxyLegacyUsers(ctx, request, "DELETE");
+      const legacyResponse = await proxyLegacyUsers(ctx, request, "DELETE", "all");
       if (legacyResponse) {
         logApiSuccess(ctx, legacyResponse.status, { source: "legacy" });
         return legacyResponse;
