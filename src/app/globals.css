@@ -27,7 +27,7 @@ body {
   color: var(--text-main);
   background:
     linear-gradient(160deg, var(--bg-start), var(--bg-end));
-  font-family: var(--font-ui), var(--font-thai), "Segoe UI", sans-serif;
+  font-family: var(--font-ui, "Segoe UI"), var(--font-thai, "Tahoma"), sans-serif;
 }
 
 a {
