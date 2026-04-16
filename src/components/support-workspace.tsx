@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type UiLocale = "th" | "en";
-type RoleGroup = "support" | "it" | "owner";
 type MenuTab = "dashboard" | "users" | "tickets" | "billing" | "recovery";
 
 type StatsPayload = {
@@ -103,14 +102,6 @@ const HASH_TO_TAB: Record<string, MenuTab> = {
   "#workspace-tickets": "tickets",
   "#workspace-billing": "billing",
   "#workspace-recovery": "recovery",
-};
-
-const TAB_TO_HASH: Record<MenuTab, string> = {
-  dashboard: "workspace-dashboard",
-  users: "workspace-users-general",
-  tickets: "workspace-tickets",
-  billing: "workspace-billing",
-  recovery: "workspace-recovery",
 };
 
 const UNAUTHORIZED_ERROR = "Unauthorized";
@@ -237,7 +228,7 @@ function formatStatusLabel(locale: UiLocale, value: string) {
   return map[value] ?? value;
 }
 
-export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; roleGroup: RoleGroup }) {
+export function SupportWorkspace({ locale }: { locale: UiLocale }) {
   const text = TEXT[locale];
   const [activeTab, setActiveTab] = useState<MenuTab>("dashboard");
 
@@ -258,23 +249,6 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
   const pushToast = useCallback((kind: ToastKind, message: string) => {
     setToast({ id: Date.now(), kind, message });
   }, []);
-
-  const tabs = useMemo(() => {
-    if (roleGroup === "it") {
-      return [
-        { id: "dashboard" as const, label: text.dashboard },
-        { id: "tickets" as const, label: text.tickets },
-        { id: "recovery" as const, label: text.recovery },
-      ];
-    }
-    return [
-      { id: "dashboard" as const, label: text.dashboard },
-      { id: "users" as const, label: text.users },
-      { id: "tickets" as const, label: text.tickets },
-      { id: "billing" as const, label: text.billing },
-      { id: "recovery" as const, label: text.recovery },
-    ];
-  }, [roleGroup, text.billing, text.dashboard, text.recovery, text.tickets, text.users]);
 
   const fetchJson = useCallback(async (url: string, init?: RequestInit) => {
     const response = await fetch(url, { credentials: "include", cache: "no-store", ...(init ?? {}) });
@@ -445,24 +419,6 @@ export function SupportWorkspace({ locale, roleGroup }: { locale: UiLocale; role
       <div className="workspace-anchor" id="workspace-tickets" />
       <div className="workspace-anchor" id="workspace-billing" />
       <div className="workspace-anchor" id="workspace-recovery" />
-
-      <section className="panel workspace-tabs-panel mt-4">
-        <div className="workspace-tabs">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              className={`workspace-tab ${activeTab === tab.id ? "workspace-tab-active" : ""}`}
-              onClick={() => {
-                setActiveTab(tab.id);
-                window.location.hash = TAB_TO_HASH[tab.id];
-              }}
-              type="button"
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </section>
 
       {toast ? (
         <div className="toast-stack" aria-atomic="true" aria-live="polite">

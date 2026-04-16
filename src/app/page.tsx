@@ -227,7 +227,7 @@ export default async function HomePage() {
             <p className="mt-2 max-w-4xl text-sm md:text-[15px] muted">{t(locale, "appSubtitle")}</p>
           </header>
 
-          <SupportWorkspace locale={locale} roleGroup={roleGroup} />
+          <SupportWorkspace locale={locale} />
         </section>
         </main>
       </div>
