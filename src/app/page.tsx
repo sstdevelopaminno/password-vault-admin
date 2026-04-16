@@ -1,5 +1,6 @@
 ﻿import { SupportWorkspace } from "@/components/support-workspace";
 import { SupportHeaderActions } from "@/components/support-header-actions";
+import { SupportSidebarNav } from "@/components/support-sidebar-nav";
 import { requireAdminSession } from "@/lib/auth";
 import { resolveAdminLocale, t, type AdminLocale } from "@/lib/i18n";
 
@@ -21,80 +22,20 @@ type MenuIcon = "dashboard" | "users" | "ui-check" | "tickets" | "billing" | "re
 
 const MENU_ITEMS: Record<AdminLocale, SidebarMenuItem[]> = {
   th: [
-    {
-      id: "1",
-      title: "\u0E41\u0E14\u0E0A\u0E1A\u0E2D\u0E23\u0E4C\u0E14",
-      href: "#workspace-dashboard",
-      visibleTo: ["support", "owner", "it"],
-    },
-    {
-      id: "2",
-      title: "\u0E40\u0E0A\u0E47\u0E04\u0E23\u0E32\u0E22\u0E0A\u0E37\u0E48\u0E2D\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E17\u0E31\u0E48\u0E27\u0E44\u0E1B",
-      href: "#workspace-users-general",
-      visibleTo: ["support", "owner"],
-    },
-    {
-      id: "3",
-      title: "\u0E40\u0E0A\u0E47\u0E04 UI",
-      href: "#workspace-ui-check",
-      visibleTo: ["support", "owner", "it"],
-    },
-    {
-      id: "4",
-      title: "\u0E04\u0E33\u0E23\u0E49\u0E2D\u0E07\u0E08\u0E32\u0E01\u0E28\u0E39\u0E19\u0E22\u0E4C\u0E0A\u0E48\u0E27\u0E22\u0E40\u0E2B\u0E25\u0E37\u0E2D",
-      href: "#workspace-tickets",
-      visibleTo: ["support", "owner", "it"],
-    },
-    {
-      id: "5",
-      title: "\u0E15\u0E23\u0E27\u0E08\u0E2A\u0E2D\u0E1A\u0E22\u0E2D\u0E14\u0E0A\u0E33\u0E23\u0E30\u0E40\u0E07\u0E34\u0E19",
-      href: "#workspace-billing",
-      visibleTo: ["support", "owner"],
-    },
-    {
-      id: "6",
-      title: "\u0E01\u0E39\u0E49\u0E04\u0E37\u0E19\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19",
-      href: "#workspace-recovery",
-      visibleTo: ["support", "owner", "it"],
-    },
+    { id: "1", title: "แดชบอร์ด", href: "#workspace-dashboard", visibleTo: ["support", "owner", "it"] },
+    { id: "2", title: "เช็ครายชื่อผู้ใช้งานทั่วไป", href: "#workspace-users-general", visibleTo: ["support", "owner"] },
+    { id: "3", title: "เช็ค UI", href: "#workspace-ui-check", visibleTo: ["support", "owner", "it"] },
+    { id: "4", title: "คำร้องจากศูนย์ช่วยเหลือ", href: "#workspace-tickets", visibleTo: ["support", "owner", "it"] },
+    { id: "5", title: "ตรวจสอบยอดชำระเงิน", href: "#workspace-billing", visibleTo: ["support", "owner"] },
+    { id: "6", title: "กู้คืนข้อมูลผู้ใช้งาน", href: "#workspace-recovery", visibleTo: ["support", "owner", "it"] },
   ],
   en: [
-    {
-      id: "1",
-      title: "Dashboard",
-      href: "#workspace-dashboard",
-      visibleTo: ["support", "owner", "it"],
-    },
-    {
-      id: "2",
-      title: "General Users",
-      href: "#workspace-users-general",
-      visibleTo: ["support", "owner"],
-    },
-    {
-      id: "3",
-      title: "UI Check",
-      href: "#workspace-ui-check",
-      visibleTo: ["support", "owner", "it"],
-    },
-    {
-      id: "4",
-      title: "Help Center Tickets",
-      href: "#workspace-tickets",
-      visibleTo: ["support", "owner", "it"],
-    },
-    {
-      id: "5",
-      title: "Billing Monitor",
-      href: "#workspace-billing",
-      visibleTo: ["support", "owner"],
-    },
-    {
-      id: "6",
-      title: "Data Recovery",
-      href: "#workspace-recovery",
-      visibleTo: ["support", "owner", "it"],
-    },
+    { id: "1", title: "Dashboard", href: "#workspace-dashboard", visibleTo: ["support", "owner", "it"] },
+    { id: "2", title: "General Users", href: "#workspace-users-general", visibleTo: ["support", "owner"] },
+    { id: "3", title: "UI Check", href: "#workspace-ui-check", visibleTo: ["support", "owner", "it"] },
+    { id: "4", title: "Help Center Tickets", href: "#workspace-tickets", visibleTo: ["support", "owner", "it"] },
+    { id: "5", title: "Billing Monitor", href: "#workspace-billing", visibleTo: ["support", "owner"] },
+    { id: "6", title: "Data Recovery", href: "#workspace-recovery", visibleTo: ["support", "owner", "it"] },
   ],
 };
 
@@ -115,72 +56,15 @@ function iconForHref(href: string): MenuIcon {
   return "default";
 }
 
-function renderMenuIcon(icon: MenuIcon) {
-  if (icon === "dashboard") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M3 13h8V3H3v10Zm10 8h8V11h-8v10Zm0-18v6h8V3h-8ZM3 21h8v-6H3v6Z" />
-      </svg>
-    );
-  }
-  if (icon === "users") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    );
-  }
-  if (icon === "ui-check") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="3" y="4" width="18" height="12" rx="2" />
-        <path d="M8 20h8" />
-        <path d="M12 16v4" />
-        <circle cx="12" cy="10" r="2.8" />
-      </svg>
-    );
-  }
-  if (icon === "tickets") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M4 7h16v10H4z" />
-        <path d="M8 7V5h8v2" />
-        <path d="M8 12h8" />
-      </svg>
-    );
-  }
-  if (icon === "billing") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="3" y="5" width="18" height="14" rx="2" />
-        <path d="M3 10h18" />
-        <path d="M7 15h4" />
-      </svg>
-    );
-  }
-  if (icon === "recovery") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M21 12a9 9 0 1 1-3.2-6.9" />
-        <path d="M21 3v6h-6" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="9" />
-    </svg>
-  );
-}
-
 export default async function HomePage() {
   const locale = await resolveAdminLocale();
   const { profile } = await requireAdminSession();
   const roleGroup = resolveRoleGroup(profile.role);
   const visibleMenuItems = MENU_ITEMS[locale].filter((item) => item.visibleTo.includes(roleGroup));
+  const navItems = visibleMenuItems.map((item) => ({
+    ...item,
+    icon: iconForHref(item.href),
+  }));
 
   return (
     <>
@@ -202,23 +86,7 @@ export default async function HomePage() {
                 </label>
               </div>
 
-              <nav className="support-nav-list mt-5" aria-label="Support menu">
-                {visibleMenuItems.map((menu, index) => (
-                  <a
-                    key={menu.id}
-                    className={`support-nav-item support-nav-link ${index === 0 ? "support-nav-item-active" : ""}`}
-                    href={menu.href}
-                    aria-label={menu.title}
-                  >
-                    <span aria-hidden className="support-nav-icon">
-                      {renderMenuIcon(iconForHref(menu.href))}
-                    </span>
-                    <span className="support-nav-content">
-                      <span className="support-nav-title">{menu.title}</span>
-                    </span>
-                  </a>
-                ))}
-              </nav>
+              <SupportSidebarNav items={navItems} />
             </div>
           </aside>
 

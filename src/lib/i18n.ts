@@ -1,4 +1,4 @@
-import { headers } from "next/headers";
+﻿import { headers } from "next/headers";
 
 export type AdminLocale = "th" | "en";
 
@@ -38,11 +38,11 @@ const messages: Record<AdminLocale, Record<MessageKey, string>> = {
     serviceDesk: "ศูนย์บริการผู้ใช้งาน",
     serviceDeskHint: "จัดการคำร้องและติดตามการแก้ไขปัญหาของผู้ใช้งาน",
     auditCenter: "ตรวจสอบและคอมพลายแอนซ์",
-    auditCenterHint: "ติดตามประวัติการใช้งานและรายการความเสี่ยงสำคัญ",
+    auditCenterHint: "ติดตามประวัติการใช้งานและเหตุการณ์สำคัญของระบบ",
     billingCenter: "งานชำระเงินและแพ็กเกจ",
     billingCenterHint: "ดูสถานะการชำระเงินและแผนบริการของผู้ใช้งาน",
     roleControl: "สิทธิ์และการอนุมัติ",
-    roleControlHint: "กำหนดและแยกสิทธิ์ Support / IT / Owner ให้ชัดเจน",
+    roleControlHint: "แยกสิทธิ์ Support / IT / Owner ให้ชัดเจน",
     sessionTitle: "ข้อมูลเจ้าหน้าที่ที่กำลังใช้งาน",
     authorityTitle: "โครงสร้างอำนาจในระบบหลังบ้าน",
     authorityAdmin: "Support Admin",
@@ -50,7 +50,7 @@ const messages: Record<AdminLocale, Record<MessageKey, string>> = {
     authorityOwner: "Owner (Super Admin)",
     authorityOwnerDesc: "สิทธิ์สูงสุดสำหรับนโยบายและการควบคุมระบบ",
     authorityApprover: "IT / Approver",
-    authorityApproverDesc: "ตรวจสอบและอนุมัติรายการที่กระทบความปลอดภัยหรือข้อมูลสำคัญ",
+    authorityApproverDesc: "ตรวจสอบและอนุมัติรายการที่มีผลต่อความปลอดภัยหรือข้อมูลสำคัญ",
     mobileNoticeTitle: "หน้าจอนี้เหมาะกับ Desktop/Tablet",
     mobileNoticeDesc: "กรุณาใช้งานผ่านหน้าจอขนาดใหญ่เพื่อประสบการณ์ที่สมบูรณ์",
     apiToolsTitle: "เครื่องมือ API สำหรับทีมงาน",

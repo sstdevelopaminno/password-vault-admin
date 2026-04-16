@@ -1345,15 +1345,31 @@ a {
 }
 
 .ui-check-preview-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border: 1px solid rgba(37, 88, 134, 0.24);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
-  height: 32px;
+  min-height: 32px;
   padding: 0 12px;
   font-size: 12px;
   font-weight: 700;
   color: #1f4f79;
   cursor: pointer;
+}
+
+.ui-check-preview-tab-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-check-preview-tab-icon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .ui-check-preview-tab-active {
@@ -1381,28 +1397,189 @@ a {
   font-size: 11px;
 }
 
-.ui-check-screen-grid {
+.ui-mobile-frame {
   margin-top: 10px;
+  width: 100%;
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 28px;
+  border: 1px solid rgba(38, 89, 132, 0.24);
+  background: linear-gradient(180deg, #dce8f4 0%, #d3e1ef 100%);
+  box-shadow: 0 20px 30px rgba(15, 43, 71, 0.18);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.ui-mobile-header {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(35, 85, 128, 0.22);
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ui-mobile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #173f62, #0f2d46);
+  color: #eff8ff;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+}
+
+.ui-mobile-header-text {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ui-mobile-header-text strong {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.ui-mobile-header-text small {
+  font-size: 11px;
+  color: #355979;
+}
+
+.ui-mobile-scroll {
+  min-height: 320px;
+  max-height: 420px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.ui-mobile-cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.ui-check-mock-card {
-  min-height: 84px;
-  border: 1px dashed rgba(52, 104, 150, 0.3);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.78);
+.ui-mobile-card {
+  border-radius: 16px;
+  border: 1px solid rgba(34, 85, 128, 0.22);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px;
   display: grid;
-  place-items: center;
-  text-align: center;
-  padding: 8px;
+  gap: 4px;
+  min-height: 94px;
 }
 
-.ui-check-mock-card p {
+.ui-mobile-card h5 {
   margin: 0;
-  color: #335a80;
   font-size: 12px;
+  font-weight: 800;
+  color: #173f62;
+}
+
+.ui-mobile-card p {
+  margin: 0;
+  font-size: 11px;
+  color: #4a6987;
+  line-height: 1.4;
+}
+
+.ui-mobile-bottom-nav {
+  border-radius: 16px;
+  border: 1px solid rgba(38, 89, 132, 0.22);
+  background: rgba(248, 252, 255, 0.94);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+}
+
+.ui-mobile-bottom-item {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  min-height: 56px;
+  color: #2d5478;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 4px 3px;
+  cursor: pointer;
+}
+
+.ui-mobile-bottom-item span {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-mobile-bottom-item span svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ui-mobile-bottom-item small {
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.ui-mobile-bottom-item-active {
+  border-color: rgba(35, 103, 165, 0.42);
+  background: linear-gradient(180deg, rgba(54, 141, 217, 0.22), rgba(39, 108, 175, 0.2));
+  color: #16476f;
+}
+
+.ui-check-secret-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.ui-check-secret-head {
+  margin: 0;
+  font-size: 12px;
+  color: #1f4f79;
+  font-weight: 700;
+}
+
+.ui-check-secret-card {
+  border: 1px solid rgba(45, 104, 158, 0.22);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.ui-check-secret-card h5 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #1d4a72;
+}
+
+.ui-check-secret-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ui-check-secret-row span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ui-check-secret-row strong {
+  font-size: 12px;
+  color: #183f62;
   font-weight: 700;
 }
 

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 type UiLocale = "th" | "en";
 type MenuTab = "dashboard" | "users" | "uiCheck" | "tickets" | "billing" | "recovery";
+type UiCheckView = "home" | "vault" | "notes" | "share" | "help" | "settings";
+type UiCheckIcon = "home" | "vault" | "notes" | "share" | "help" | "settings";
 
 type StatsPayload = {
   totalUsers: number;
@@ -195,14 +197,14 @@ function localized(locale: UiLocale, th: string, en: string) {
 
 function formatPackageLabel(locale: UiLocale, value: string) {
   const map: Record<string, string> = locale === "th"
-    ? { free: "เธเธฃเธต", monthly: "เธฃเธฒเธขเน€เธ”เธทเธญเธ", annual: "เธฃเธฒเธขเธเธต" }
+    ? { free: "ฟรี", monthly: "รายเดือน", annual: "รายปี" }
     : { free: "Free", monthly: "Monthly", annual: "Annual" };
   return map[value] ?? value;
 }
 
 function formatPaymentLabel(locale: UiLocale, value: string) {
   const map: Record<string, string> = locale === "th"
-    ? { paid: "เธเธณเธฃเธฐเธชเธณเน€เธฃเนเธ", failed: "เธเธณเธฃเธฐเนเธกเนเธชเธณเน€เธฃเนเธ", pending: "เธฃเธญเธ”เธณเน€เธเธดเธเธเธฒเธฃ", overdue: "เธเนเธฒเธเธเธณเธฃเธฐ" }
+    ? { paid: "ชำระสำเร็จ", failed: "ชำระไม่สำเร็จ", pending: "รอดำเนินการ", overdue: "ค้างชำระ" }
     : { paid: "Paid", failed: "Failed", pending: "Pending", overdue: "Overdue" };
   return map[value] ?? value;
 }
@@ -210,19 +212,19 @@ function formatPaymentLabel(locale: UiLocale, value: string) {
 function formatStatusLabel(locale: UiLocale, value: string) {
   const map: Record<string, string> = locale === "th"
     ? {
-      open: "เน€เธเธดเธ”เธฃเธฒเธขเธเธฒเธฃ",
-      in_progress: "เธเธณเธฅเธฑเธเธ”เธณเน€เธเธดเธเธเธฒเธฃ",
-      resolved: "เน€เธชเธฃเนเธเธชเธดเนเธ",
-      closed: "เธเธดเธ”เธฃเธฒเธขเธเธฒเธฃ",
-      idle: "เธฃเธญเธเธณเธเธญ",
-      requested: "เธชเนเธเธเธณเธเธญเนเธฅเนเธง",
-      otp_verified: "เธขเธทเธเธขเธฑเธ OTP เนเธฅเนเธง",
-      completed: "เธเธนเนเธเธทเธเธชเธณเน€เธฃเนเธ",
-      rejected: "เธเธเธดเน€เธชเธ",
-      active: "เนเธเนเธเธฒเธ",
-      pending_approval: "เธฃเธญเธญเธเธธเธกเธฑเธ•เธด",
-      pending: "เธฃเธญเธ”เธณเน€เธเธดเธเธเธฒเธฃ",
-      disabled: "เธเธดเธ”เนเธเนเธเธฒเธ",
+      open: "เปิดรายการ",
+      in_progress: "กำลังดำเนินการ",
+      resolved: "เสร็จสิ้น",
+      closed: "ปิดรายการ",
+      idle: "รอคำขอ",
+      requested: "ส่งคำขอแล้ว",
+      otp_verified: "ยืนยัน OTP แล้ว",
+      completed: "กู้คืนสำเร็จ",
+      rejected: "ปฏิเสธ",
+      active: "ใช้งาน",
+      pending_approval: "รออนุมัติ",
+      pending: "รอดำเนินการ",
+      disabled: "ปิดใช้งาน",
     }
     : {
       open: "Open",
@@ -240,6 +242,57 @@ function formatStatusLabel(locale: UiLocale, value: string) {
       disabled: "Disabled",
     };
   return map[value] ?? value;
+}
+
+function renderUiCheckIcon(icon: UiCheckIcon) {
+  if (icon === "home") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M3 10.5 12 3l9 7.5" />
+        <path d="M5 9.8V21h14V9.8" />
+      </svg>
+    );
+  }
+  if (icon === "vault") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="3" y="11" width="18" height="10" rx="2" />
+        <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+      </svg>
+    );
+  }
+  if (icon === "notes") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="4" y="3" width="16" height="18" rx="2" />
+        <path d="M8 8h8M8 12h8M8 16h5" />
+      </svg>
+    );
+  }
+  if (icon === "share") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <path d="m8.6 10.8 6.8-3.6m-6.8 6.1 6.8 3.7" />
+      </svg>
+    );
+  }
+  if (icon === "help") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.2 9a2.8 2.8 0 0 1 5.2 1.3c0 2-2.4 2.3-2.4 4" />
+        <circle cx="12" cy="17.5" r=".8" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 7h16M8 3v8m8-8v8M4 11h16v10H4z" />
+    </svg>
+  );
 }
 
 export function SupportWorkspace({ locale }: { locale: UiLocale }) {
@@ -262,7 +315,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [insight, setInsight] = useState<UserInsight | null>(null);
   const [uiCheckUser, setUiCheckUser] = useState<UserRow | null>(null);
-  const [uiCheckView, setUiCheckView] = useState<"home" | "vault" | "notes" | "share" | "settings" | "help">("home");
+  const [uiCheckView, setUiCheckView] = useState<UiCheckView>("home");
 
   const pushToast = useCallback((kind: ToastKind, message: string) => {
     setToast({ id: Date.now(), kind, message });
@@ -276,7 +329,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
     }
     const body = (await response.json().catch(() => null)) as unknown;
     if (!response.ok) {
-      throw new Error(normalizeApiError(body, localized(locale, "เนเธกเนเธชเธฒเธกเธฒเธฃเธ–เธ—เธณเธฃเธฒเธขเธเธฒเธฃเนเธ”เน", "Request failed")));
+      throw new Error(normalizeApiError(body, localized(locale, "ไม่สามารถทำรายการได้", "Request failed")));
     }
     return body;
   }, [locale]);
@@ -320,7 +373,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
       }
     } catch (err) {
       if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
-      pushToast("error", err instanceof Error ? err.message : localized(locale, "เนเธซเธฅเธ”เธเนเธญเธกเธนเธฅเนเธกเนเธชเธณเน€เธฃเนเธ", "Unable to load data"));
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "โหลดข้อมูลไม่สำเร็จ", "Unable to load data"));
     } finally {
       setLoading(false);
     }
@@ -370,12 +423,24 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
 
   const uiCheckMenus = useMemo(
     () => [
-      { id: "home" as const, label: localized(locale, "หน้าหลัก", "Home") },
-      { id: "vault" as const, label: localized(locale, "รหัสส่วนตัว", "Vault") },
-      { id: "notes" as const, label: localized(locale, "โน้ต", "Notes") },
-      { id: "share" as const, label: localized(locale, "รหัสทีม", "Team Share") },
-      { id: "help" as const, label: localized(locale, "ศูนย์ช่วยเหลือ", "Help Center") },
-      { id: "settings" as const, label: localized(locale, "ตั้งค่า", "Settings") },
+      { id: "home" as const, icon: "home" as const, label: localized(locale, "หน้าหลัก", "Home") },
+      { id: "vault" as const, icon: "vault" as const, label: localized(locale, "รหัสส่วนตัว", "Vault") },
+      { id: "notes" as const, icon: "notes" as const, label: localized(locale, "โน้ต", "Notes") },
+      { id: "share" as const, icon: "share" as const, label: localized(locale, "รหัสทีม", "Team Share") },
+      { id: "help" as const, icon: "help" as const, label: localized(locale, "ศูนย์ช่วยเหลือ", "Help Center") },
+      { id: "settings" as const, icon: "settings" as const, label: localized(locale, "ตั้งค่า", "Settings") },
+    ],
+    [locale],
+  );
+  const selectedUiCheckMenu = uiCheckMenus.find((item) => item.id === uiCheckView);
+  const isMaskedSecretView = uiCheckView === "vault" || uiCheckView === "share";
+  const mobileBottomMenus = useMemo(
+    () => [
+      { id: "home" as const, icon: "home" as const, label: localized(locale, "หน้าหลัก", "Home") },
+      { id: "notes" as const, icon: "notes" as const, label: localized(locale, "โน้ต", "Notes") },
+      { id: "vault" as const, icon: "vault" as const, label: localized(locale, "รหัสส่วนตัว", "Vault") },
+      { id: "share" as const, icon: "share" as const, label: localized(locale, "รหัสทีม", "Team") },
+      { id: "settings" as const, icon: "settings" as const, label: localized(locale, "ตั้งค่า", "Settings") },
     ],
     [locale],
   );
@@ -387,7 +452,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
       setInsight((await fetchJson(`/api/admin/support-user-insights?userId=${user.id}`)) as UserInsight);
     } catch (err) {
       if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
-      pushToast("error", err instanceof Error ? err.message : localized(locale, "เนเธซเธฅเธ”เธเนเธญเธกเธนเธฅเธเธนเนเนเธเนเนเธกเนเธชเธณเน€เธฃเนเธ", "Unable to load user details"));
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "โหลดข้อมูลผู้ใช้งานไม่สำเร็จ", "Unable to load user details"));
     }
   }
 
@@ -417,11 +482,11 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ticketId, action }),
       });
-      pushToast("success", (body as { message?: string }).message ?? localized(locale, "เธญเธฑเธเน€เธ”เธ•เธเธณเธฃเนเธญเธเนเธฅเนเธง", "Ticket updated"));
+      pushToast("success", (body as { message?: string }).message ?? localized(locale, "อัปเดตคำร้องแล้ว", "Ticket updated"));
       void loadCurrentMenu();
     } catch (err) {
       if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
-      pushToast("error", err instanceof Error ? err.message : localized(locale, "เธญเธฑเธเน€เธ”เธ•เธเธณเธฃเนเธญเธเนเธกเนเธชเธณเน€เธฃเนเธ", "Ticket update failed"));
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "อัปเดตคำร้องไม่สำเร็จ", "Ticket update failed"));
     }
   }
 
@@ -440,11 +505,11 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           renew,
         }),
       });
-      pushToast("success", (body as { message?: string }).message ?? localized(locale, "เธญเธฑเธเน€เธ”เธ•เธเธฒเธฃเธเธณเธฃเธฐเน€เธเธดเธเนเธฅเนเธง", "Billing updated"));
+      pushToast("success", (body as { message?: string }).message ?? localized(locale, "อัปเดตการชำระเงินแล้ว", "Billing updated"));
       void loadCurrentMenu();
     } catch (err) {
       if (err instanceof Error && err.message === UNAUTHORIZED_ERROR) return;
-      pushToast("error", err instanceof Error ? err.message : localized(locale, "เธญเธฑเธเน€เธ”เธ•เธเธฒเธฃเธเธณเธฃเธฐเน€เธเธดเธเนเธกเนเธชเธณเน€เธฃเนเธ", "Billing update failed"));
+      pushToast("error", err instanceof Error ? err.message : localized(locale, "อัปเดตการชำระเงินไม่สำเร็จ", "Billing update failed"));
     }
   }
 
@@ -496,10 +561,10 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
         <section className="panel mt-4">
           <h3 className="text-base font-semibold">{text.dashboard}</h3>
           <div className="metric-grid mt-4">
-            <article className="metric-card"><h4>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธเธ—เธฑเนเธเธซเธกเธ”", "Total Users")}</h4><p>{stats?.totalUsers ?? 0}</p></article>
-            <article className="metric-card"><h4>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธเธ—เธตเนเธขเธฑเธเนเธเนเธเธฒเธ", "Active Users")}</h4><p>{stats?.activeUsers ?? 0}</p></article>
-            <article className="metric-card"><h4>{localized(locale, "เธฃเธญเธญเธเธธเธกเธฑเธ•เธด", "Pending Approvals")}</h4><p>{stats?.pendingApprovals ?? 0}</p></article>
-            <article className="metric-card"><h4>{localized(locale, "เธญเธเธธเธกเธฑเธ•เธดเนเธ 24 เธเธก.", "Reviewed 24h")}</h4><p>{stats?.reviewedApprovals24h ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "ผู้ใช้งานทั้งหมด", "Total Users")}</h4><p>{stats?.totalUsers ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "ผู้ใช้งานที่ยังใช้งาน", "Active Users")}</h4><p>{stats?.activeUsers ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "รออนุมัติ", "Pending Approvals")}</h4><p>{stats?.pendingApprovals ?? 0}</p></article>
+            <article className="metric-card"><h4>{localized(locale, "ตรวจสอบใน 24 ชม.", "Reviewed 24h")}</h4><p>{stats?.reviewedApprovals24h ?? 0}</p></article>
           </div>
         </section>
       ) : null}
@@ -512,7 +577,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           </div>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธ", "User")}</th><th>{localized(locale, "เธงเธฑเธเธ—เธตเนเธชเธกเธฑเธเธฃ", "Signup")}</th><th>{localized(locale, "เธชเธ–เธฒเธเธฐ", "Status")}</th><th>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธเธฒเธฃ", "Action")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "วันที่สมัคร", "Signup")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
               <tbody>
                 {filteredUsers.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : filteredUsers.map((user, idx) => (
                   <tr key={user.id}>
@@ -590,7 +655,10 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
                         onClick={() => setUiCheckView(item.id)}
                         type="button"
                       >
-                        {item.label}
+                        <span aria-hidden className="ui-check-preview-tab-icon">
+                          {renderUiCheckIcon(item.icon)}
+                        </span>
+                        <span>{item.label}</span>
                       </button>
                     ))}
                   </div>
@@ -599,23 +667,133 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
                     <header className="ui-check-screen-head">
                       <h4>
                         {localized(locale, "โหมดตรวจสอบหน้าจอ", "UI Inspection Mode")} -{" "}
-                        {uiCheckMenus.find((item) => item.id === uiCheckView)?.label}
+                        {selectedUiCheckMenu?.label}
                       </h4>
                       <small>{localized(locale, "ไม่แสดงข้อมูลจริงของผู้ใช้", "No real user data is shown")}</small>
                     </header>
-                    <div className="ui-check-screen-grid">
-                      <div className="ui-check-mock-card">
-                        <p>{localized(locale, "การ์ดตัวอย่าง 1", "Mock Card 1")}</p>
+
+                    <div className="ui-mobile-frame">
+                      <div className="ui-mobile-header">
+                        <div className="ui-mobile-avatar">{(uiCheckUser.full_name || "U").slice(0, 1).toUpperCase()}</div>
+                        <div className="ui-mobile-header-text">
+                          <strong>{localized(locale, "Master Password", "Master Password")}</strong>
+                          <small>{localized(locale, "เวอร์ชันทดสอบ 19.12.16", "Preview build 19.12.16")}</small>
+                          <small>{localized(locale, "สิทธิ์: ผู้ใช้งานทั่วไป", "Role: General User")}</small>
+                        </div>
                       </div>
-                      <div className="ui-check-mock-card">
-                        <p>{localized(locale, "การ์ดตัวอย่าง 2", "Mock Card 2")}</p>
+
+                      <div className="ui-mobile-scroll">
+                        {uiCheckView === "home" ? (
+                          <div className="ui-mobile-cards">
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "แจ้งเตือน", "Notifications")}</h5>
+                              <p>{localized(locale, "อัปเดตระบบ", "System updates")}</p>
+                            </article>
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "ศูนย์ช่วยเหลือ", "Help Center")}</h5>
+                              <p>{localized(locale, "FAQ • Ticket • ติดต่อแอดมิน", "FAQ • Ticket • Contact admin")}</p>
+                            </article>
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "ระบบความปลอดภัย", "Security Score")}</h5>
+                              <p>88/100</p>
+                            </article>
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "พื้นที่จัดเก็บ", "Storage")}</h5>
+                              <p>0%</p>
+                            </article>
+                          </div>
+                        ) : null}
+
+                        {uiCheckView === "notes" ? (
+                          <div className="ui-mobile-cards">
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "บันทึกล่าสุด", "Recent Notes")}</h5>
+                              <p>{localized(locale, "ตัวอย่างบันทึกสำหรับพรีวิว UI", "Sample note for UI preview")}</p>
+                            </article>
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "โฟลเดอร์", "Folders")}</h5>
+                              <p>{localized(locale, "งานส่วนตัว • งานทีม", "Personal • Team")}</p>
+                            </article>
+                          </div>
+                        ) : null}
+
+                        {uiCheckView === "help" ? (
+                          <div className="ui-mobile-cards">
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "คำถามที่พบบ่อย", "FAQ")}</h5>
+                              <p>{localized(locale, "แนวทางแก้ปัญหาเบื้องต้น", "Basic troubleshooting guide")}</p>
+                            </article>
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "รายการ Ticket", "Ticket Queue")}</h5>
+                              <p>{localized(locale, "สถานะ: กำลังติดตาม", "Status: In progress")}</p>
+                            </article>
+                          </div>
+                        ) : null}
+
+                        {uiCheckView === "settings" ? (
+                          <div className="ui-mobile-cards">
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "การตั้งค่าบัญชี", "Account Settings")}</h5>
+                              <p>{localized(locale, "ภาษา • ความปลอดภัย • อุปกรณ์", "Language • Security • Devices")}</p>
+                            </article>
+                            <article className="ui-mobile-card">
+                              <h5>{localized(locale, "การแจ้งเตือน", "Notifications")}</h5>
+                              <p>{localized(locale, "อีเมลและการแจ้งเตือนในแอป", "Email and in-app notifications")}</p>
+                            </article>
+                          </div>
+                        ) : null}
+
+                        {isMaskedSecretView ? (
+                          <div className="ui-check-secret-list">
+                            <p className="ui-check-secret-head">{localized(locale, "รายการตัวอย่าง (ซ่อนรหัส)", "Preview Items (Masked)")}</p>
+                            {[1, 2].map((idx) => (
+                              <article className="ui-check-secret-card" key={`${uiCheckView}-${idx}`}>
+                                <h5>
+                                  {uiCheckView === "vault"
+                                    ? localized(locale, "รหัสส่วนตัว", "Vault")
+                                    : localized(locale, "รหัสทีม", "Team Share")}
+                                  {" "}
+                                  {idx}
+                                </h5>
+                                <div className="ui-check-secret-row">
+                                  <span>{localized(locale, "หัวข้อ", "Title")}</span>
+                                  <strong>{uiCheckView === "vault" ? `Credential ${idx}` : `Team Credential ${idx}`}</strong>
+                                </div>
+                                <div className="ui-check-secret-row">
+                                  <span>{localized(locale, "อีเมล", "Email")}</span>
+                                  <strong>{uiCheckUser.email || "-"}</strong>
+                                </div>
+                                <div className="ui-check-secret-row">
+                                  <span>{localized(locale, "ชื่อผู้ใช้", "Username")}</span>
+                                  <strong>{uiCheckUser.full_name || "-"}</strong>
+                                </div>
+                                <div className="ui-check-secret-row">
+                                  <span>{localized(locale, "รหัสผ่าน", "Password")}</span>
+                                  <strong>xxxxxxx</strong>
+                                </div>
+                                <div className="ui-check-secret-row">
+                                  <span>{localized(locale, "PIN", "PIN")}</span>
+                                  <strong>xxxxxxx</strong>
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="ui-check-mock-card">
-                        <p>{localized(locale, "การ์ดตัวอย่าง 3", "Mock Card 3")}</p>
-                      </div>
-                      <div className="ui-check-mock-card">
-                        <p>{localized(locale, "การ์ดตัวอย่าง 4", "Mock Card 4")}</p>
-                      </div>
+
+                      <nav className="ui-mobile-bottom-nav">
+                        {mobileBottomMenus.map((menu) => (
+                          <button
+                            key={menu.id}
+                            className={`ui-mobile-bottom-item ${uiCheckView === menu.id ? "ui-mobile-bottom-item-active" : ""}`}
+                            onClick={() => setUiCheckView(menu.id)}
+                            type="button"
+                          >
+                            <span aria-hidden>{renderUiCheckIcon(menu.icon)}</span>
+                            <small>{menu.label}</small>
+                          </button>
+                        ))}
+                      </nav>
                     </div>
                   </div>
                 </>
@@ -630,7 +808,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           <h3 className="text-base font-semibold">{text.tickets}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธ", "User")}</th><th>{localized(locale, "เธซเธฑเธงเธเนเธญเธเธฑเธเธซเธฒ", "Issue")}</th><th>{localized(locale, "เธชเธ–เธฒเธเธฐ", "Status")}</th><th>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธเธฒเธฃ", "Action")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "หัวข้อปัญหา", "Issue")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
               <tbody>
                 {tickets.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : tickets.map((ticket, idx) => (
                   <tr key={ticket.id}>
@@ -655,7 +833,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           <h3 className="text-base font-semibold">{text.billing}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธ", "User")}</th><th>{localized(locale, "เนเธเนเธเน€เธเธ", "Package")}</th><th>{localized(locale, "เธชเธ–เธฒเธเธฐเธเธณเธฃเธฐเน€เธเธดเธ", "Payment Status")}</th><th>{localized(locale, "เธขเธญเธ”เน€เธเธดเธ", "Amount")}</th><th>{localized(locale, "เธงเธฑเธเธซเธกเธ”เธญเธฒเธขเธธ", "Expires")}</th><th>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธเธฒเธฃ", "Action")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "แพ็กเกจ", "Package")}</th><th>{localized(locale, "สถานะชำระเงิน", "Payment Status")}</th><th>{localized(locale, "ยอดเงิน", "Amount")}</th><th>{localized(locale, "วันหมดอายุ", "Expires")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
               <tbody>
                 {billing.length === 0 ? <tr><td colSpan={7} className="muted">{text.noData}</td></tr> : billing.map((row, idx) => (
                   <tr key={row.userId}>
@@ -765,7 +943,7 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
           <h3 className="text-base font-semibold">{text.recovery}</h3>
           <div className="table-shell table-scroll mt-4 overflow-x-auto">
             <table className="audit-table users-table">
-              <thead><tr><th>#</th><th>{localized(locale, "เธเธนเนเนเธเนเธเธฒเธ", "User")}</th><th>{localized(locale, "เธชเธ–เธฒเธเธฐ", "Status")}</th><th>{localized(locale, "เธญเธฑเธเน€เธ”เธ•เธฅเนเธฒเธชเธธเธ”", "Last Action")}</th><th>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธเธฒเธฃ", "Action")}</th></tr></thead>
+              <thead><tr><th>#</th><th>{localized(locale, "ผู้ใช้งาน", "User")}</th><th>{localized(locale, "สถานะ", "Status")}</th><th>{localized(locale, "อัปเดตล่าสุด", "Last Action")}</th><th>{localized(locale, "การจัดการ", "Action")}</th></tr></thead>
               <tbody>
                 {recovery.length === 0 ? <tr><td colSpan={5} className="muted">{text.noData}</td></tr> : recovery.map((row, idx) => (
                   <tr key={row.userId}>
@@ -796,12 +974,12 @@ export function SupportWorkspace({ locale }: { locale: UiLocale }) {
             {insight ? (
               <>
                 <div className="metric-grid mt-4">
-                  <article className="metric-card"><h4>{localized(locale, "เนเธเนเธเน€เธเธ", "Package")}</h4><p className="text-xl">{formatPackageLabel(locale, insight.plan.packageType)}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "เธเธฒเธฃเธเธณเธฃเธฐเน€เธเธดเธ", "Payment")}</h4><p className="text-xl">{formatPaymentLabel(locale, insight.plan.paymentStatus)}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "เธเธณเธเธงเธเธฃเธฒเธขเธเธฒเธฃ", "Items")}</h4><p className="text-xl">{insight.usage.vaultItemsCount}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "เธเธฒเธฃเธเธฑเธ”เธฅเธญเธ", "Copy")}</h4><p className="text-xl">{insight.usage.copyActionCount}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "เธเธฑเธเธซเธฒ PIN", "PIN Issues")}</h4><p className="text-xl">{insight.usage.pinIssueCount}</p></article>
-                  <article className="metric-card"><h4>{localized(locale, "เธเธฑเธเธซเธฒ UI", "UI Issues")}</h4><p className="text-xl">{insight.usage.uiIssueCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "แพ็กเกจ", "Package")}</h4><p className="text-xl">{formatPackageLabel(locale, insight.plan.packageType)}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "การชำระเงิน", "Payment")}</h4><p className="text-xl">{formatPaymentLabel(locale, insight.plan.paymentStatus)}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "จำนวนรายการ", "Items")}</h4><p className="text-xl">{insight.usage.vaultItemsCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "การคัดลอก", "Copy")}</h4><p className="text-xl">{insight.usage.copyActionCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "ปัญหา PIN", "PIN Issues")}</h4><p className="text-xl">{insight.usage.pinIssueCount}</p></article>
+                  <article className="metric-card"><h4>{localized(locale, "ปัญหา UI", "UI Issues")}</h4><p className="text-xl">{insight.usage.uiIssueCount}</p></article>
                 </div>
               </>
             ) : <p className="mt-4 text-sm muted">{text.loading}</p>}
